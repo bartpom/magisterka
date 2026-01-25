@@ -1,0 +1,721 @@
+Plik: 000000biden_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 33.18%
+
+--- DETALE AI ---
+AI Face/Subject Score: 48.97%
+AI Scene (Frames) Score: 60.55%
+AI Video Model Score: 26.41%
+AI Combined (max) Score: 60.55%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 148.73 px
+Mruganie: 12.4 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 000000biden_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 27.20%
+
+--- DETALE AI ---
+AI Face/Subject Score: 49.92%
+AI Scene (Frames) Score: 62.25%
+AI Video Model Score: 17.47%
+AI Combined (max) Score: 62.25%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 160.50 px
+Mruganie: 4.2 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 000000kot_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 34.60%
+
+--- DETALE AI ---
+AI Face/Subject Score: 89.51%
+AI Scene (Frames) Score: 87.92%
+AI Video Model Score: 11.07%
+AI Combined (max) Score: 89.51%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 108.44 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.04
+Sharpness (face): N/A
+
+Plik: 000000passport_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 60.12%
+
+--- DETALE AI ---
+AI Face/Subject Score: 46.58%
+AI Scene (Frames) Score: 75.86%
+AI Video Model Score: 63.07%
+AI Combined (max) Score: 75.86%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 120.52 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 000000pilot_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 68.29%
+
+--- DETALE AI ---
+AI Face/Subject Score: 93.87%
+AI Scene (Frames) Score: 91.08%
+AI Video Model Score: 57.32%
+AI Combined (max) Score: 93.87%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 22.47 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 000000sora_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 28.35%
+
+--- DETALE AI ---
+AI Face/Subject Score: 39.48%
+AI Scene (Frames) Score: 77.11%
+AI Video Model Score: 23.58%
+AI Combined (max) Score: 77.11%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 113.52 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.05
+Sharpness (face): N/A
+
+Plik: 0000_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 49.61%
+
+--- DETALE AI ---
+AI Face/Subject Score: 41.48%
+AI Scene (Frames) Score: 94.17%
+AI Video Model Score: 53.09%
+AI Combined (max) Score: 94.17%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 22.31 px
+Mruganie: 12.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 0001_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 15.38%
+
+--- DETALE AI ---
+AI Face/Subject Score: 36.38%
+AI Scene (Frames) Score: 82.30%
+AI Video Model Score: 6.38%
+AI Combined (max) Score: 82.30%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 17.20 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0002_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 13.84%
+
+--- DETALE AI ---
+AI Face/Subject Score: 37.80%
+AI Scene (Frames) Score: 85.42%
+AI Video Model Score: 3.58%
+AI Combined (max) Score: 85.42%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 24.48 px
+Mruganie: 18.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0003_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 45.49%
+
+--- DETALE AI ---
+AI Face/Subject Score: 60.65%
+AI Scene (Frames) Score: 92.61%
+AI Video Model Score: 39.00%
+AI Combined (max) Score: 92.61%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 123.48 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.09
+Sharpness (face): N/A
+
+Plik: 0004_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 19.53%
+
+--- DETALE AI ---
+AI Face/Subject Score: 37.41%
+AI Scene (Frames) Score: 77.16%
+AI Video Model Score: 11.87%
+AI Combined (max) Score: 77.16%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 12.56 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0005_fake.mp4
+
+WERDYKT: FAKE (PRAWDOPODOBNE)
+Wynik łączny (Score): 79.18%
+
+--- DETALE AI ---
+AI Face/Subject Score: 39.29%
+AI Scene (Frames) Score: 81.20%
+AI Video Model Score: 94.84%
+AI Combined (max) Score: 94.84%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 15.42 px
+Mruganie: 18.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 0006_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 29.27%
+
+--- DETALE AI ---
+AI Face/Subject Score: 33.84%
+AI Scene (Frames) Score: 93.36%
+AI Video Model Score: 27.31%
+AI Combined (max) Score: 93.36%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 28.61 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 0007_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 13.31%
+
+--- DETALE AI ---
+AI Face/Subject Score: 31.57%
+AI Scene (Frames) Score: 92.09%
+AI Video Model Score: 5.49%
+AI Combined (max) Score: 92.09%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 301.64 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.07
+Sharpness (face): N/A
+
+Plik: 0008_fake.mp4
+
+WERDYKT: FAKE (PRAWDOPODOBNE)
+Wynik łączny (Score): 79.16%
+
+--- DETALE AI ---
+AI Face/Subject Score: 41.62%
+AI Scene (Frames) Score: 93.23%
+AI Video Model Score: 93.82%
+AI Combined (max) Score: 93.82%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 135.26 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.07
+Sharpness (face): N/A
+
+Plik: 0009_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 11.38%
+
+--- DETALE AI ---
+AI Face/Subject Score: 30.00%
+AI Scene (Frames) Score: 97.59%
+AI Video Model Score: 3.40%
+AI Combined (max) Score: 97.59%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 173.05 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.06
+Sharpness (face): N/A
+
+Plik: 0010_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 20.97%
+
+--- DETALE AI ---
+AI Face/Subject Score: 28.18%
+AI Scene (Frames) Score: 91.77%
+AI Video Model Score: 17.88%
+AI Combined (max) Score: 91.77%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): N/A
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: N/A
+Sharpness (face): N/A
+
+Plik: 0011_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 31.06%
+
+--- DETALE AI ---
+AI Face/Subject Score: 63.01%
+AI Scene (Frames) Score: 77.82%
+AI Video Model Score: 17.37%
+AI Combined (max) Score: 77.82%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 9.97 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0012_fake.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 35.95%
+
+--- DETALE AI ---
+AI Face/Subject Score: 36.83%
+AI Scene (Frames) Score: 87.20%
+AI Video Model Score: 35.57%
+AI Combined (max) Score: 87.20%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 26.94 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0013_fake.mp4
+
+WERDYKT: FAKE (PRAWDOPODOBNE)
+Wynik łączny (Score): 74.91%
+
+--- DETALE AI ---
+AI Face/Subject Score: 34.44%
+AI Scene (Frames) Score: 80.54%
+AI Video Model Score: 92.26%
+AI Combined (max) Score: 92.26%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 17.33 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0014_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 20.78%
+
+--- DETALE AI ---
+AI Face/Subject Score: 32.99%
+AI Scene (Frames) Score: 95.78%
+AI Video Model Score: 15.55%
+AI Combined (max) Score: 95.78%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 5.31 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.00
+Sharpness (face): N/A
+
+Plik: 0015_fake.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 19.93%
+
+--- DETALE AI ---
+AI Face/Subject Score: 53.52%
+AI Scene (Frames) Score: 79.28%
+AI Video Model Score: 5.54%
+AI Combined (max) Score: 79.28%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 15.40 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0000_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 28.23%
+
+--- DETALE AI ---
+AI Face/Subject Score: 32.55%
+AI Scene (Frames) Score: 85.09%
+AI Video Model Score: 26.38%
+AI Combined (max) Score: 85.09%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 230.63 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0001_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 10.38%
+
+--- DETALE AI ---
+AI Face/Subject Score: 21.57%
+AI Scene (Frames) Score: 88.36%
+AI Video Model Score: 5.59%
+AI Combined (max) Score: 88.36%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 203.86 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0002_real.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 68.79%
+
+--- DETALE AI ---
+AI Face/Subject Score: 71.39%
+AI Scene (Frames) Score: 83.97%
+AI Video Model Score: 67.67%
+AI Combined (max) Score: 83.97%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 4.05 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0003_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 21.01%
+
+--- DETALE AI ---
+AI Face/Subject Score: 33.26%
+AI Scene (Frames) Score: 97.69%
+AI Video Model Score: 15.76%
+AI Combined (max) Score: 97.69%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 524.81 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0004_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 11.07%
+
+--- DETALE AI ---
+AI Face/Subject Score: 31.40%
+AI Scene (Frames) Score: 84.74%
+AI Video Model Score: 2.36%
+AI Combined (max) Score: 84.74%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 168.05 px
+Mruganie: 24.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0005_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 21.09%
+
+--- DETALE AI ---
+AI Face/Subject Score: 34.01%
+AI Scene (Frames) Score: 91.72%
+AI Video Model Score: 15.55%
+AI Combined (max) Score: 91.72%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 9.94 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 0006_real.mp4
+
+WERDYKT: GREY ZONE (NIEPEWNE)
+Wynik łączny (Score): 34.13%
+
+--- DETALE AI ---
+AI Face/Subject Score: 50.65%
+AI Scene (Frames) Score: 84.16%
+AI Video Model Score: 27.05%
+AI Combined (max) Score: 84.16%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 930.07 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0007_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 25.00%
+
+--- DETALE AI ---
+AI Face/Subject Score: 47.87%
+AI Scene (Frames) Score: 83.64%
+AI Video Model Score: 15.20%
+AI Combined (max) Score: 83.64%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 3.47 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.01
+Sharpness (face): N/A
+
+Plik: 0008_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 24.58%
+
+--- DETALE AI ---
+AI Face/Subject Score: 45.85%
+AI Scene (Frames) Score: 89.67%
+AI Video Model Score: 15.46%
+AI Combined (max) Score: 89.67%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 391.58 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0009_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 24.16%
+
+--- DETALE AI ---
+AI Face/Subject Score: 52.49%
+AI Scene (Frames) Score: 90.76%
+AI Video Model Score: 12.01%
+AI Combined (max) Score: 90.76%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 83.71 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0010_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 26.05%
+
+--- DETALE AI ---
+AI Face/Subject Score: 51.04%
+AI Scene (Frames) Score: 87.52%
+AI Video Model Score: 15.33%
+AI Combined (max) Score: 87.52%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 147.33 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.02
+Sharpness (face): N/A
+
+Plik: 0011_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 20.55%
+
+--- DETALE AI ---
+AI Face/Subject Score: 49.96%
+AI Scene (Frames) Score: 86.80%
+AI Video Model Score: 7.95%
+AI Combined (max) Score: 86.80%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 795.93 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.04
+Sharpness (face): N/A
+
+Plik: 0012_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 22.71%
+
+--- DETALE AI ---
+AI Face/Subject Score: 37.74%
+AI Scene (Frames) Score: 94.80%
+AI Video Model Score: 16.27%
+AI Combined (max) Score: 94.80%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 4.97 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.12
+Sharpness (face): N/A
+
+Plik: 0013_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 21.62%
+
+--- DETALE AI ---
+AI Face/Subject Score: 32.67%
+AI Scene (Frames) Score: 97.59%
+AI Video Model Score: 16.89%
+AI Combined (max) Score: 97.59%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 228.45 px
+Mruganie: N/A
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0014_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 23.52%
+
+--- DETALE AI ---
+AI Face/Subject Score: 28.03%
+AI Scene (Frames) Score: 89.32%
+AI Video Model Score: 21.58%
+AI Combined (max) Score: 89.32%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 315.95 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
+
+Plik: 0015_real.mp4
+
+WERDYKT: REAL (PRAWDOPODOBNE)
+Wynik łączny (Score): 26.07%
+
+--- DETALE AI ---
+AI Face/Subject Score: 44.77%
+AI Scene (Frames) Score: 93.51%
+AI Video Model Score: 18.05%
+AI Combined (max) Score: 93.51%
+
+--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---
+Stabilność (Jitter): 594.14 px
+Mruganie: 0.0 / min
+ELA Score: N/A
+FFT Score: N/A
+Border Artifacts: 0.03
+Sharpness (face): N/A
