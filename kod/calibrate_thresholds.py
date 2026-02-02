@@ -1,11 +1,10 @@
 # calibrate_thresholds.py
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -20,11 +19,6 @@ def _safe_float(x: Any) -> Optional[float]:
 
 
 def label_from_filename(path: str) -> Optional[int]:
-    """
-    Zwraca etykietę na podstawie nazwy pliku:
-      *_fake* -> 1
-      *_real* -> 0
-    """
     name = os.path.basename(path).lower()
     if "_fake" in name:
         return 1
@@ -50,13 +44,7 @@ class Thresholds:
         return {"REAL_MAX": float(self.real_max), "FAKE_MIN": float(self.fake_min)}
 
 
-def _best_thresholds_from_scores(real_scores: List[float], fake_scores: List[float]) -> Thresholds:
-    """
-    Dobiera (REAL_MAX, FAKE_MIN) tak, żeby:
-    - REAL_MAX = wysoki percentyl wyników real (np. 95%)
-    - FAKE_MIN = niski percentyl wyników fake (np. 5%)
-    To daje szeroką "grey zone" tam, gdzie rozkłady się nakładają, ale minimalizuje FP/FN.
-    """
+def _best_thresholds(real_scores: List[float], fake_scores: List[float]) -> Thresholds:
     if not real_scores or not fake_scores:
         return Thresholds(real_max=30.0, fake_min=70.0)
 
@@ -66,26 +54,18 @@ def _best_thresholds_from_scores(real_scores: List[float], fake_scores: List[flo
     real_max = float(np.percentile(r, 95))
     fake_min = float(np.percentile(f, 5))
 
-    # jeżeli progi się "przecinają" (nakładanie), ustaw wide grey-zone zamiast psuć decyzje
+    # gdy rozkłady się nakładają, wymuś grey zone
     if fake_min <= real_max:
         mid = float((fake_min + real_max) / 2.0)
         real_max = max(5.0, min(45.0, mid - 5.0))
         fake_min = min(95.0, max(55.0, mid + 5.0))
 
-    # sanity clamp
     real_max = max(0.0, min(49.0, real_max))
     fake_min = max(51.0, min(100.0, fake_min))
-
     return Thresholds(real_max=real_max, fake_min=fake_min)
 
 
 def compute_thresholds_from_details(details_list: List[Dict[str, Any]]) -> Dict[str, Thresholds]:
-    """
-    details_list: lista dictów z gui (po normalize_details), musi mieć:
-      - full_path
-      - ai_final_score
-      - deepfake_final_score
-    """
     real_ai: List[float] = []
     fake_ai: List[float] = []
     real_df: List[float] = []
@@ -106,9 +86,8 @@ def compute_thresholds_from_details(details_list: List[Dict[str, Any]]) -> Dict[
         if df_s is not None:
             (fake_df if y == 1 else real_df).append(df_s)
 
-    thr_ai = _best_thresholds_from_scores(real_ai, fake_ai)
-    thr_df = _best_thresholds_from_scores(real_df, fake_df)
-
+    thr_ai = _best_thresholds(real_ai, fake_ai)
+    thr_df = _best_thresholds(real_df, fake_df)
     return {"ai_detector": thr_ai, "deepfake_detector": thr_df}
 
 
@@ -140,10 +119,3 @@ def load_thresholds(path: str) -> Optional[Dict[str, Thresholds]]:
         }
     except Exception:
         return None
-
-
-def verdict_for(detector_name: str, score: float, thresholds: Dict[str, Thresholds]) -> str:
-    thr = thresholds.get(detector_name)
-    if not thr:
-        return "NIEPEWNE / BRAK PROGÓW"
-    return _verdict_from_score(score, thr.real_max, thr.fake_min)
