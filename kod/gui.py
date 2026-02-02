@@ -111,53 +111,60 @@ class AnalysisWorker(QtCore.QThread):
                 self.progress.emit(int(curr), int(tot))
 
             try:
-                res = ai_detector.scan_for_deepfake(
+                # NOTE:
+                # GUI powinno używać analyze_video(), bo ta funkcja:
+                # - korzysta z run_dir
+                # - zapisuje raport .txt
+                # - zwraca (report, rep_path)
+                report, rep_path = ai_detector.analyze_video(
                     path,
+                    self._run_dir,
+                    max_frames=60,
+                    do_ai=self._do_face_ai,
+                    do_forensic=self._do_forensic,
+                    do_watermark=self._do_watermark,
                     progress_callback=cb,
                     check_stop=lambda: self._stop,
-                    do_face_ai=self._do_face_ai,
-                    do_forensic=self._do_forensic,
-                    run_dir=self._run_dir,
                 )
 
-                if isinstance(res, tuple) and len(res) == 2:
-                    # Case: (AiResult, ForensicResult)
-                    ai_res, for_res = res
-                    status = "DONE"
-                    score = float(getattr(ai_res, "combined_max", 0.0) or 0.0)
-                    fake_ratio = 0.0
-                    details = {
-                        "ai_face_score": getattr(ai_res, "face_score", None),
-                        "ai_scene_score": getattr(ai_res, "scene_score", None),
-                        "ai_video_score": getattr(ai_res, "video_score", None),
-                        "ai_combined_score": getattr(ai_res, "combined_max", None),
+                if report is None:
+                    raise RuntimeError("analyze_video returned None")
 
-                        "jitter_px": getattr(for_res, "jitter_px", None),
-                        "blink_per_min": getattr(for_res, "blink_per_min", None),
-                        "ela_score": getattr(for_res, "ela_score", None),
-                        "fft_score": getattr(for_res, "fft_score", None),
-                        "border_artifacts": getattr(for_res, "border_artifacts", None),
-                        "face_sharpness": getattr(for_res, "face_sharpness", None),
-                    }
-                elif isinstance(res, tuple) and len(res) == 4:
-                    status, score, fake_ratio, details = res
-                else:
-                    raise ValueError(f"Unexpected return type from scan_for_deepfake: {type(res)}")
+                # Mapujemy report -> szczegóły dla GUI (spójne z _normalize_details())
+                status = "DONE"
+                score = float(getattr(report, "total_score", 0.0) or 0.0)
+                fake_ratio = 0.0
 
-                details = (details or {})
-                details["status"] = status
-                details.setdefault("raw_final_score", details.get("final_score", score))
-                details.setdefault("fake_ratio", fake_ratio)
-                details.setdefault("full_path", os.path.abspath(path))
+                ai = getattr(report, "ai", None)
+                details = {
+                    "verdict": getattr(report, "verdict", None),
+                    "final_score": score,
+
+                    "ai_face_score": getattr(ai, "face_score", None) if ai is not None else None,
+                    "ai_scene_score": getattr(ai, "scene_score", None) if ai is not None else None,
+                    "ai_video_score": getattr(ai, "video_score", None) if ai is not None else None,
+
+                    # Raporty: folder run + ścieżka do pliku .txt
+                    "folder_path": self._run_dir,
+                    "report_txt_path": rep_path,
+
+                    "full_path": os.path.abspath(path),
+                }
+
             except Exception as e:
                 self.log_line.emit(f"[BŁĄD] {os.path.basename(path)} (AI): {e}")
                 details = {
                     "status": "ERROR",
                     "verdict": "ERROR",
                     "final_score": 0.0,
+                    "folder_path": self._run_dir,
                     "full_path": os.path.abspath(path)
                 }
+                status = "ERROR"
+                score = 0.0
+                fake_ratio = 0.0
 
+            # Watermark jest obsłużony wewnątrz analyze_video(); ten blok zostaje dla kompatybilności
             if not self._stop and self._do_watermark:
                 wm = self._run_watermark(path)
                 if isinstance(wm, dict):
@@ -165,6 +172,12 @@ class AnalysisWorker(QtCore.QThread):
                         if k == "folder_path" and "folder_path" in details:
                             continue
                         details[k] = v
+
+            details = (details or {})
+            details["status"] = status
+            details.setdefault("raw_final_score", details.get("final_score", score))
+            details.setdefault("fake_ratio", fake_ratio)
+            details.setdefault("full_path", os.path.abspath(path))
 
             self.file_finished.emit(idx, details)
 
@@ -373,13 +386,20 @@ class MainWindow(QtWidgets.QMainWindow):
         scene_w = float(w.get("scene", 0.15))
         video_w = float(w.get("video", 0.50))
 
-        # suppress scene jeśli config mówi
+        # suppress scene jeśli config mówi, a jak nie mówi to domyślnie suppress
+        # w przypadku gdy mamy realny sygnał z twarzy lub wideo
+        should_suppress = False
         if hasattr(config, "should_suppress_scene"):
             try:
-                if config.should_suppress_scene(ai_face, ai_video):
-                    scene_w = 0.0
+                should_suppress = bool(config.should_suppress_scene(ai_face, ai_video))
             except Exception:
-                pass
+                should_suppress = False
+        else:
+            # Default policy: jeśli mamy twarz lub wideo, scena często jest zbyt agresywna (100%)
+            should_suppress = (ai_face is not None) or (ai_video is not None)
+
+        if should_suppress:
+            scene_w = 0.0
 
         items: List[tuple] = []
         if ai_face is not None:
@@ -710,12 +730,17 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         idx = items[0].row()
 
-        report_dir = self.report_paths.get(idx)
+        # Preferuj ścieżkę do raportu .txt jeśli mamy
+        report_path = None
+        rp = self.report_paths.get(idx)
+        if rp and os.path.exists(rp):
+            report_path = rp
+
         fallback_dir = os.path.dirname(os.path.abspath(self.files[idx])) if 0 <= idx < len(self.files) else None
 
         path_to_open = None
-        if report_dir and os.path.isdir(report_dir):
-            path_to_open = report_dir
+        if report_path:
+            path_to_open = report_path
         elif fallback_dir and os.path.isdir(fallback_dir):
             path_to_open = fallback_dir
 
@@ -785,9 +810,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_file_finished(self, idx: int, details: dict):
         d = self._normalize_details(idx, details)
 
-        folder = d.get("folder_path") or d.get("watermark_folder")
-        if folder:
-            self.report_paths[idx] = folder
+        # report_txt_path (pliki) -> do przycisku "Otwórz raport"
+        report_path = d.get("report_txt_path")
+        if report_path:
+            self.report_paths[idx] = report_path
+        else:
+            folder = d.get("folder_path") or d.get("watermark_folder")
+            if folder:
+                self.report_paths[idx] = folder
 
         block = self._make_summary_block(idx, d)
         self.per_file_summaries[idx] = block
@@ -795,14 +825,17 @@ class MainWindow(QtWidgets.QMainWindow):
         verdict = d.get("verdict", "UNKNOWN")
         score = d.get("final_score")
 
+        # folder w logu: pokazuj run_dir, nawet jeśli report_txt_path jest plikiem
+        folder_for_log = d.get("folder_path") or d.get("watermark_folder")
+
         if d.get("no_signal"):
-            self.append_log(f"< [{idx + 1}/{len(self.files)}] BRAK DANYCH z modeli. Raport: {folder}")
+            self.append_log(f"< [{idx + 1}/{len(self.files)}] BRAK DANYCH z modeli. Raport: {folder_for_log}")
         else:
             try:
                 score_str = f"{float(score):.2f}%" if score is not None else "N/A"
             except Exception:
                 score_str = "N/A"
-            self.append_log(f"< [{idx + 1}/{len(self.files)}] DONE: {verdict} ({score_str}). Raport: {folder}")
+            self.append_log(f"< [{idx + 1}/{len(self.files)}] DONE: {verdict} ({score_str}). Raport: {folder_for_log}")
 
     @QtCore.pyqtSlot()
     def on_all_done(self):
