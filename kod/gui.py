@@ -1,17 +1,16 @@
-# gui.py (IMPROVED - FIXED THRESHOLDS FALLBACK)
 import os
 import sys
 from typing import List, Optional, Set, Dict, Any
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+import ai_detector
 import config
 
 # gui.py
 import importlib.util
 import pathlib
-import sys as _sys
-
+import sys
 
 def _load_local_ai_detector():
     # ładuje dokładnie ai_detector.py z tego samego katalogu co gui.py
@@ -20,10 +19,9 @@ def _load_local_ai_detector():
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load ai_detector from: {path}")
     mod = importlib.util.module_from_spec(spec)
-    _sys.modules["ai_detector"] = mod
+    sys.modules["ai_detector"] = mod
     spec.loader.exec_module(mod)
     return mod
-
 
 ai_detector = _load_local_ai_detector()
 
@@ -31,17 +29,16 @@ ai_detector = _load_local_ai_detector()
 if not hasattr(ai_detector, "begin_run"):
     raise RuntimeError(f"Loaded ai_detector has no begin_run(). File: {getattr(ai_detector,'__file__',None)}")
 
+
+def detect_one(video_path: str) -> str:
+    res = scan_video(video_path, opts=ScanOptions(max_frames=24, do_ai=True, do_forensic=True))
+    return format_report_pl(res)
+
 try:
     import ocr_detector
 except Exception as _e:
     ocr_detector = None
     print(f"[OCR] Moduł ocr_detector niedostępny: {_e}")
-
-try:
-    import calibrate_thresholds
-except Exception as _e:
-    calibrate_thresholds = None
-    print(f"[CAL] Moduł calibrate_thresholds niedostępny: {_e}")
 
 SUPPORTED_EXTS = {
     ".mp4", ".mov", ".avi", ".mkv", ".webm",
@@ -101,6 +98,7 @@ class AnalysisWorker(QtCore.QThread):
         return None
 
     def run(self):
+        total_files = len(self._files)
         for idx, path in enumerate(self._files):
             if self._stop:
                 break
@@ -111,6 +109,8 @@ class AnalysisWorker(QtCore.QThread):
                 self.progress.emit(int(curr), int(tot))
 
             try:
+                # Fix: ai_detector.scan_for_deepfake might return (AiResult, ForensicResult) [2 values]
+                # but the GUI expects (status, score, fake_ratio, details) [4 values].
                 res = ai_detector.scan_for_deepfake(
                     path,
                     progress_callback=cb,
@@ -119,25 +119,21 @@ class AnalysisWorker(QtCore.QThread):
                     do_forensic=self._do_forensic,
                     run_dir=self._run_dir,
                 )
-
+                
                 if isinstance(res, tuple) and len(res) == 2:
                     # Case: (AiResult, ForensicResult)
                     ai_res, for_res = res
                     status = "DONE"
-                    score = float(getattr(ai_res, "combined_max", 0.0) or 0.0)
-                    fake_ratio = 0.0
+                    score = ai_res.combined_max if hasattr(ai_res, "combined_max") else 0.0
+                    fake_ratio = 0.0 # Default if not provided
                     details = {
-                        "ai_face_score": getattr(ai_res, "face_score", None),
-                        "ai_scene_score": getattr(ai_res, "scene_score", None),
-                        "ai_video_score": getattr(ai_res, "video_score", None),
-                        "ai_combined_score": getattr(ai_res, "combined_max", None),
-
-                        "jitter_px": getattr(for_res, "jitter_px", None),
-                        "blink_per_min": getattr(for_res, "blink_per_min", None),
-                        "ela_score": getattr(for_res, "ela_score", None),
-                        "fft_score": getattr(for_res, "fft_score", None),
-                        "border_artifacts": getattr(for_res, "border_artifacts", None),
-                        "face_sharpness": getattr(for_res, "face_sharpness", None),
+                        "ai_face_score": ai_res.face_score if hasattr(ai_res, "face_score") else None,
+                        "ai_scene_score": ai_res.scene_score if hasattr(ai_res, "scene_score") else None,
+                        "ai_video_score": ai_res.video_score if hasattr(ai_res, "video_score") else None,
+                        "jitter_px": for_res.jitter_px if hasattr(for_res, "jitter_px") else None,
+                        "ela_score": for_res.ela_score if hasattr(for_res, "ela_score") else None,
+                        "fft_score": for_res.fft_score if hasattr(for_res, "fft_score") else None,
+                        "border_artifacts": for_res.border_artifacts if hasattr(for_res, "border_artifacts") else None,
                     }
                 elif isinstance(res, tuple) and len(res) == 4:
                     status, score, fake_ratio, details = res
@@ -187,10 +183,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.report_paths: Dict[int, str] = {}
         self.per_file_summaries: Dict[int, str] = {}
         self.current_run_dir: Optional[str] = None
-
-        # kalibracja progów (ładowana z pliku per-run)
-        self.thresholds = None
-        self.thresholds_path: Optional[str] = None
 
         central = QtWidgets.QWidget(self)
         self.setCentralWidget(central)
@@ -349,7 +341,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # -------------------- Normalizacja wyników --------------------
 
     @staticmethod
-    def _to_float(v: Any) -> Optional[float]:
+    def _to_pct(v: Any) -> Optional[float]:
         try:
             if v is None:
                 return None
@@ -363,131 +355,49 @@ class MainWindow(QtWidgets.QMainWindow):
                 return d[k]
         return None
 
-    def _fuse_ai_score(self, ai_face: Optional[float], ai_scene: Optional[float], ai_video: Optional[float]) -> Optional[float]:
-        """
-        Zamiast max(): ważona średnia z config.FUSE_WEIGHTS + suppress sceny.
-        To stabilizuje wynik i zmniejsza saturację 100%.
-        """
-        w = getattr(config, "FUSE_WEIGHTS", {"video": 0.5, "face": 0.35, "scene": 0.15})
-        face_w = float(w.get("face", 0.35))
-        scene_w = float(w.get("scene", 0.15))
-        video_w = float(w.get("video", 0.50))
-
-        # suppress scene jeśli config mówi
-        if hasattr(config, "should_suppress_scene"):
-            try:
-                if config.should_suppress_scene(ai_face, ai_video):
-                    scene_w = 0.0
-            except Exception:
-                pass
-
-        items: List[tuple] = []
-        if ai_face is not None:
-            items.append((ai_face, face_w))
-        if ai_scene is not None:
-            items.append((ai_scene, scene_w))
-        if ai_video is not None:
-            items.append((ai_video, video_w))
-
-        items = [(v, ww) for (v, ww) in items if ww > 0.0]
-        if not items:
-            vals = [v for v in [ai_face, ai_scene, ai_video] if v is not None]
-            return max(vals) if vals else None
-
-        s = sum(v * ww for v, ww in items)
-        ws = sum(ww for _, ww in items)
-        if ws <= 0:
-            return None
-        return max(0.0, min(100.0, s / ws))
-
-    def _compute_deepfake_score(self, details: Dict[str, Any], ai_face: Optional[float], ai_video: Optional[float]) -> Optional[float]:
-        """
-        Deepfake score ma bazować na sygnałach twarzy/wideo + forensic jako korekta,
-        ale tylko jeśli forensic jest dostępne.
-        """
-        forensic_ok = bool(details.get("forensic_available"))
-        if not forensic_ok:
-            vals = [v for v in [ai_face, ai_video] if v is not None]
-            return (sum(vals) / len(vals)) if vals else None
-
-        jitter = self._to_float(details.get("jitter_px"))
-        ela = self._to_float(details.get("ela_score"))
-        fft = self._to_float(details.get("fft_score"))
-        border = self._to_float(details.get("border_artifacts"))
-        sharp = self._to_float(details.get("face_sharpness"))
-
-        border_s = None if border is None else max(0.0, min(100.0, (border / 0.08) * 100.0))
-        jitter_s = None if jitter is None else max(0.0, min(100.0, (jitter / float(getattr(config, "MAX_JITTER", 200.0))) * 100.0))
-        ela_s = None if ela is None else max(0.0, min(100.0, ela * 100.0))
-        fft_s = None if fft is None else max(0.0, min(100.0, fft * 50.0))
-
-        sharp_s = None
-        if sharp is not None:
-            sharp_norm = max(0.0, min(1.0, sharp / 80.0))
-            sharp_s = (1.0 - sharp_norm) * 100.0
-
-        base_vals = [v for v in [ai_face, ai_video] if v is not None]
-        base = (sum(base_vals) / len(base_vals)) if base_vals else None
-        if base is None:
-            return None
-
-        fvals = [v for v in [border_s, jitter_s, sharp_s, ela_s, fft_s] if v is not None]
-        if not fvals:
-            return base
-
-        forensic = float(sum(fvals) / len(fvals))
-
-        gate = float(getattr(config, "FORENSIC_GATE_MIN", 60.0))
-        if base < gate:
-            return max(0.0, min(100.0, base * 0.85 + forensic * 0.15))
-
-        return max(0.0, min(100.0, base * 0.70 + forensic * 0.30))
-
-    def _verdict_from_fallback_thresholds(self, score: Optional[float]) -> str:
-        """
-        FIX: nie polegamy na config.THRESHOLDS (bo czasem config importuje się z innego miejsca).
-        Bierzemy config.FAKE_MIN/REAL_MAX albo defaulty.
-        """
-        if score is None:
-            return "NIEPEWNE / BRAK DANYCH"
-
-        fake_min = float(getattr(config, "FAKE_MIN", 60.0))
-        real_max = float(getattr(config, "REAL_MAX", 30.0))
-
-        if score >= fake_min:
-            return "FAKE (PRAWDOPODOBNE)"
-        if score <= real_max:
-            return "REAL (PRAWDOPODOBNE)"
-        return "NIEPEWNE / GREY ZONE"
-
     def _normalize_details(self, idx: int, details: Dict[str, Any]) -> Dict[str, Any]:
         full_path = details.get("full_path") or (self.files[idx] if 0 <= idx < len(self.files) else "")
         details["full_path"] = os.path.abspath(full_path) if full_path else full_path
 
-        ai_face = self._to_float(self._details_get(details, "ai_face_score", "ai_face_raw"))
-        ai_scene = self._to_float(self._details_get(details, "ai_scene_score", "ai_scene_raw"))
-        ai_video = self._to_float(self._details_get(details, "ai_video_score", "ai_video_raw"))
+        ai_face = self._to_pct(self._details_get(details, "ai_face_score", "ai_face_raw"))
+        ai_scene = self._to_pct(self._details_get(details, "ai_scene_score", "ai_scene_raw"))
+        ai_video = self._to_pct(self._details_get(details, "ai_video_score", "ai_video_raw"))
+        ai_combined = self._to_pct(self._details_get(details, "ai_combined_score", "ai_raw"))
 
-        ai_combined = self._fuse_ai_score(ai_face, ai_scene, ai_video)
+        if ai_combined is None:
+            vals = [v for v in [ai_face, ai_scene, ai_video] if v is not None]
+            ai_combined = max(vals) if vals else None
+
+        final_score = self._to_pct(self._details_get(details, "final_score", "raw_final_score"))
+        if final_score is None:
+            final_score = ai_combined
 
         forensic_available = bool(self._details_get(details, "forensic_available"))
+        faces_any = bool(self._details_get(details, "faces_detected_any"))
         if not forensic_available:
-            if any(self._details_get(details, k) is not None for k in ["jitter_px", "blink_per_min", "ela_score", "fft_score", "border_artifacts", "face_sharpness"]):
+            if any(self._details_get(details, k) is not None for k in ["jitter_px", "blink_per_min", "ela_score", "fft_score"]):
                 forensic_available = True
 
-        jitter = self._to_float(self._details_get(details, "jitter_px", "jitter_score"))
-        blink = self._to_float(self._details_get(details, "blink_per_min", "blinks_per_min"))
-        ela = self._to_float(self._details_get(details, "ela_score"))
-        fft = self._to_float(self._details_get(details, "fft_score"))
-        border = self._to_float(self._details_get(details, "border_artifacts", "border_score"))
-        sharp = self._to_float(self._details_get(details, "face_sharpness", "sharp_face"))
+        jitter = self._to_pct(self._details_get(details, "jitter_px", "jitter_score"))
+        blink = self._to_pct(self._details_get(details, "blink_per_min", "blinks_per_min"))
+        ela = self._to_pct(self._details_get(details, "ela_score"))
+        fft = self._to_pct(self._details_get(details, "fft_score"))
+        border = self._to_pct(self._details_get(details, "border_artifacts", "border_score"))
+        sharp = self._to_pct(self._details_get(details, "face_sharpness", "sharp_face"))
+
+        watermark_found = bool(self._details_get(details, "watermark_found"))
+        watermark_label = self._details_get(details, "watermark_label")
+        watermark_folder = self._details_get(details, "watermark_folder")
 
         details["ai_face_score"] = ai_face
         details["ai_scene_score"] = ai_scene
         details["ai_video_score"] = ai_video
         details["ai_combined_score"] = ai_combined
+        details["final_score"] = final_score
 
         details["forensic_available"] = forensic_available
+        details["faces_detected_any"] = faces_any
+
         details["jitter_px"] = jitter
         details["blink_per_min"] = blink
         details["ela_score"] = ela
@@ -495,50 +405,30 @@ class MainWindow(QtWidgets.QMainWindow):
         details["border_artifacts"] = border
         details["face_sharpness"] = sharp
 
-        ai_final = ai_combined
-        df_final = self._compute_deepfake_score(details, ai_face, ai_video)
+        details["watermark_found"] = watermark_found
+        details["watermark_label"] = watermark_label
+        details["watermark_folder"] = watermark_folder
 
-        details["ai_final_score"] = ai_final
-        details["deepfake_final_score"] = df_final
-
-        # dwa werdykty: kalibracja jeśli jest, inaczej fallback na REAL_MAX/FAKE_MIN
-        if calibrate_thresholds is not None and self.thresholds is not None:
-            if ai_final is not None:
-                details["ai_verdict"] = calibrate_thresholds.verdict_for("ai_detector", float(ai_final), self.thresholds)
+        verdict = details.get("verdict")
+        if not verdict:
+            if final_score is None:
+                verdict = "NIEPEWNE / BRAK DANYCH"
             else:
-                details["ai_verdict"] = "NIEPEWNE / BRAK DANYCH"
+                verdict = self._verdict_from_score(float(final_score))
+        details["verdict"] = verdict
 
-            if df_final is not None:
-                details["deepfake_verdict"] = calibrate_thresholds.verdict_for("deepfake_detector", float(df_final), self.thresholds)
-            else:
-                details["deepfake_verdict"] = "N/A (BRAK TWARZY / BRAK SYGNAŁU)"
-        else:
-            details["ai_verdict"] = self._verdict_from_fallback_thresholds(ai_final)
-            details["deepfake_verdict"] = self._verdict_from_fallback_thresholds(df_final) if df_final is not None else "N/A (BRAK TWARZY / BRAK SYGNAŁU)"
-
-        # combined verdict
-        av = str(details.get("ai_verdict", "")).upper()
-        dv = str(details.get("deepfake_verdict", "")).upper()
-        if "FAKE" in av or "FAKE" in dv:
-            combined_verdict = "FAKE (PRAWDOPODOBNE)"
-        elif "REAL" in av and "REAL" in dv:
-            combined_verdict = "REAL (PRAWDOPODOBNE)"
-        else:
-            combined_verdict = "NIEPEWNE / GREY ZONE"
-
-        details["verdict"] = combined_verdict
-
-        vals = [v for v in [ai_final, df_final] if v is not None]
-        details["final_score"] = float(max(vals)) if vals else None
-
-        details["no_signal"] = (ai_final is None and df_final is None)
+        details["no_signal"] = (final_score is None and ai_combined is None and ai_face is None and ai_scene is None and ai_video is None)
         details.setdefault("timestamp", config.now_str() if hasattr(config, "now_str") else "")
 
-        details["watermark_found"] = bool(self._details_get(details, "watermark_found"))
-        details["watermark_label"] = self._details_get(details, "watermark_label")
-        details["watermark_folder"] = self._details_get(details, "watermark_folder")
-
         return details
+
+    @staticmethod
+    def _verdict_from_score(score: float) -> str:
+        if score >= float(config.THRESHOLDS["FAKE_MIN"]):
+            return "FAKE (PRAWDOPODOBNE)"
+        if score <= float(config.THRESHOLDS["REAL_MAX"]):
+            return "REAL (PRAWDOPODOBNE)"
+        return "NIEPEWNE / GREY ZONE"
 
     @staticmethod
     def _fmt_pct(v: Optional[float]) -> str:
@@ -560,28 +450,22 @@ class MainWindow(QtWidgets.QMainWindow):
         d = self._normalize_details(idx, details.copy())
 
         fname = os.path.basename(d.get("full_path", "?"))
+        verdict = d.get("verdict", "NIEZNANY")
         ts = d.get("timestamp")
 
-        ai_verdict = d.get("ai_verdict", "N/A")
-        df_verdict = d.get("deepfake_verdict", "N/A")
-        combined_verdict = d.get("verdict", "N/A")
-
-        ai_final = d.get("ai_final_score")
-        df_final = d.get("deepfake_final_score")
         final_score = d.get("final_score")
-
         ai_face = d.get("ai_face_score")
         ai_scene = d.get("ai_scene_score")
         ai_video = d.get("ai_video_score")
         ai_combined = d.get("ai_combined_score")
 
         forensic_ok = bool(d.get("forensic_available"))
-        jitter2 = d.get("jitter_px")
-        blink2 = d.get("blink_per_min")
-        ela2 = d.get("ela_score")
-        fft2 = d.get("fft_score")
-        border2 = d.get("border_artifacts")
-        sharp2 = d.get("face_sharpness")
+        jitter = d.get("jitter_px")
+        blink = d.get("blink_per_min")
+        ela = d.get("ela_score")
+        fft = d.get("fft_score")
+        border = d.get("border_artifacts")
+        sharp = d.get("face_sharpness")
 
         wm_found = bool(d.get("watermark_found"))
         wm_label = d.get("watermark_label")
@@ -593,18 +477,24 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             lines.append("")
 
-        lines.append(f"WERDYKT (COMBINED): {combined_verdict}")
-        lines.append(f"WERDYKT (AI_DETECTOR): {ai_verdict}")
-        lines.append(f"WERDYKT (DEEPFAKE_DETECTOR): {df_verdict}")
-        lines.append(f"Wynik łączny (Score): {self._fmt_pct(final_score)}")
-        lines.append(f"Score (AI_DETECTOR): {self._fmt_pct(ai_final)}")
-        lines.append(f"Score (DEEPFAKE_DETECTOR): {self._fmt_pct(df_final)}\n")
+        lines.append(f"WERDYKT PODSUMOWUJĄCY: {verdict}")
+        lines.append(f"Wynik łączny (Score): {self._fmt_pct(final_score)}\n")
+
+        ai_detector_verdict = d.get('ai_detector_verdict', 'N/A')
+        ai_detector_score = d.get('ai_detector_score', 0.0)
+        deepfake_verdict = d.get('deepfake_verdict', 'N/A')
+        deepfake_score = d.get('deepfake_score', 0.0)
+
+        lines.append("--- WERDYKTY CZĄSTKOWE ---")
+        lines.append(f"AI DETECTOR (Scena/Gen): {ai_detector_verdict} ({ai_detector_score:.2f}%)")
+        lines.append(f"DEEPFAKE (Twarz): {deepfake_verdict} ({deepfake_score:.2f}%)")
+        lines.append("")
 
         lines.append("--- DETALE AI ---")
         lines.append(f"AI Face/Subject Score: {self._fmt_pct(ai_face)}")
         lines.append(f"AI Scene (Frames) Score: {self._fmt_pct(ai_scene)}")
         lines.append(f"AI Video Model Score: {self._fmt_pct(ai_video)}")
-        lines.append(f"AI Combined (weighted) Score: {self._fmt_pct(ai_combined)}\n")
+        lines.append(f"AI Combined (max) Score: {self._fmt_pct(ai_combined)}\n")
 
         lines.append("--- DETALE FORENSIC (tylko przy ludzkiej twarzy) ---")
         if not forensic_ok:
@@ -615,12 +505,12 @@ class MainWindow(QtWidgets.QMainWindow):
             lines.append("Border Artifacts: N/A")
             lines.append("Sharpness (face): N/A")
         else:
-            lines.append(f"Stabilność (Jitter): {self._fmt_px(jitter2)}")
-            lines.append(f"Mruganie: {self._fmt_rate(blink2)}")
-            lines.append(f"ELA Score: {self._fmt_num(ela2)}")
-            lines.append(f"FFT Score: {self._fmt_num(fft2)}")
-            lines.append(f"Border Artifacts: {self._fmt_num(border2)}")
-            lines.append(f"Sharpness (face): {self._fmt_num(sharp2)}")
+            lines.append(f"Stabilność (Jitter): {self._fmt_px(jitter)}")
+            lines.append(f"Mruganie: {self._fmt_rate(blink)}")
+            lines.append(f"ELA Score: {self._fmt_num(ela)}")
+            lines.append(f"FFT Score: {self._fmt_num(fft)}")
+            lines.append(f"Border Artifacts: {self._fmt_num(border)}")
+            lines.append(f"Sharpness (face): {self._fmt_num(sharp)}")
 
         if wm_found:
             lines.append("\n--- WATERMARK ---")
@@ -669,15 +559,10 @@ class MainWindow(QtWidgets.QMainWindow):
         do_forensic = self.chk_forensic.isChecked()
         do_watermark = self.chk_watermark.isChecked()
 
+        # Nowy run per START
         run_dir = ai_detector.begin_run()
         self.current_run_dir = run_dir
         self.append_log(f"> Run folder: {run_dir}")
-
-        self.thresholds_path = os.path.join(run_dir, "_calibration_thresholds.json")
-        if calibrate_thresholds is not None:
-            self.thresholds = calibrate_thresholds.load_thresholds(self.thresholds_path)
-            if self.thresholds:
-                self.append_log(f"> [CAL] Załadowano progi kalibracji: {self.thresholds_path}")
 
         self.report_paths.clear()
         self.per_file_summaries.clear()
@@ -690,7 +575,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.append_log(f"> Rozpoczynam analizę… (AI={do_ai}, Forensic={do_forensic}, Watermark={do_watermark})")
 
-        self.worker = AnalysisWorker(self.files, bool(do_ai), bool(do_forensic), bool(do_watermark), run_dir, self)
+        # do_ai kontroluje tylko to, czy liczymy AI; w praktyce do_face_ai = do_ai itd.
+        do_face_ai = bool(do_ai)
+        do_forensic2 = bool(do_forensic)
+
+        self.worker = AnalysisWorker(self.files, do_face_ai, do_forensic2, do_watermark, run_dir, self)
         self.worker.progress.connect(self.on_progress)
         self.worker.file_started.connect(self.on_file_started)
         self.worker.file_finished.connect(self.on_file_finished)
@@ -785,15 +674,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_file_finished(self, idx: int, details: dict):
         d = self._normalize_details(idx, details)
 
+        verdict = d.get("verdict", "UNKNOWN")
+        score = d.get("final_score")
+
         folder = d.get("folder_path") or d.get("watermark_folder")
         if folder:
             self.report_paths[idx] = folder
 
         block = self._make_summary_block(idx, d)
         self.per_file_summaries[idx] = block
-
-        verdict = d.get("verdict", "UNKNOWN")
-        score = d.get("final_score")
 
         if d.get("no_signal"):
             self.append_log(f"< [{idx + 1}/{len(self.files)}] BRAK DANYCH z modeli. Raport: {folder}")
@@ -824,6 +713,18 @@ def run():
     w = MainWindow()
     w.show()
     sys.exit(app.exec_())
+
+# ------------------------------------------------------------
+# Backward-compat: GUI oczekuje config.THRESHOLDS
+# ------------------------------------------------------------
+FAKE_MIN = float(globals().get("FAKE_MIN", 70.0))
+REAL_MAX = float(globals().get("REAL_MAX", 30.0))
+
+if "THRESHOLDS" not in globals():
+    THRESHOLDS = {
+        "FAKE_MIN": FAKE_MIN,
+        "REAL_MAX": REAL_MAX,
+    }
 
 
 if __name__ == "__main__":
