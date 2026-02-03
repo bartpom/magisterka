@@ -99,17 +99,39 @@ except ImportError:
         return d3 if d3 is not None and d3 >= 85.0 else None
 
 
-    def fuse_scores(features: Dict[str, Any]) -> float:
-        weights = getattr(config, 'FUSE_WEIGHTS', {"video": 0.70, "face": 0.30, "scene": 0.0})
-        acc = 0.0
-        wsum = 0.0
-        for k, w in weights.items():
-            v = safe_float(features.get(k))
-            if v is None or w <= 0:
-                continue
-            acc += v * w
-            wsum += w
-        return clamp(acc / wsum) if wsum > 0 else 0.0
+def fuse_scores(features: Dict[str, Any]) -> float:
+    # Logika "Weighted Score" zintegrowana z Safety Gate
+    weights = getattr(config, 'FUSE_WEIGHTS', {"video": 0.50, "face": 0.30, "scene": 0.20})
+    
+    face = safe_float(features.get("face"))
+    scene = safe_float(features.get("scene"))
+    video = safe_float(features.get("video"))
+    
+    # --- Safety Gate / Noise Filter ---
+    # Jeśli scena ma 100% ale wideo i twarz są niskie, tłumimy wynik sceny (częsty błąd w nowym repo)
+    if scene is not None and scene > 95:
+        if (video is not None and video < 30) and (face is None or face < 30):
+            scene *= 0.4  # Tłumienie szumu sceny
+            
+    acc = 0.0
+    wsum = 0.0
+    
+    vals = {"video": video, "face": face, "scene": scene}
+    for k, w in weights.items():
+        v = vals.get(k)
+        if v is None or w <= 0:
+            continue
+        acc += v * w
+        wsum += w
+        
+    final = clamp(acc / wsum) if wsum > 0 else 0.0
+    
+    # Multi-Signal Boost (z wersji ULTRA/FINAL)
+    signals = [v for v in [video, face, scene] if v is not None and v > 45]
+    if len(signals) >= 2:
+        final = clamp(final + 10.0)
+        
+    return final
 
 
     def decision_policy(score: float, details: Dict[str, Any], policy: str) -> str:
@@ -249,26 +271,40 @@ def _fmt_num(x: Optional[float], *, pct: bool = False, nd: int = 2) -> str:
 
 def _verdict_from_score(score: float) -> str:
     # Use thresholds from config
-    real_max = getattr(config, "REAL_MAX", 25.0)
-    fake_min = getattr(config, "FAKE_MIN", 45.0)
+    real_max = getattr(config, "REAL_MAX", 30.0)
+    fake_min = getattr(config, "FAKE_MIN", 60.0)
 
     if score <= real_max:
-        return "REAL (PRAWDOPODOBNE)"
+        return f"REAL (PRAWDOPODOBNE) (<=REAL_MAX {real_max})"
     if score >= fake_min:
-        return "FAKE (PRAWDOPODOBNE)"
-    return "NIEPEWNE / GREY ZONE"
+        return f"FAKE (PRAWDOPODOBNE) (>=FAKE_MIN {fake_min})"
+    
+    # Dodatkowe info dla Grey Zone (zgodnie z nowym raportem)
+    to_fake = fake_min - score
+    over_real = score - real_max
+    return f"NIEPEWNE / GREY ZONE ({score:.2f}%) [GREY: +{to_fake:.2f} do FAKE, +{over_real:.2f} ponad REAL]"
 
 
 def _write_report_txt(report: Report, out_path: str) -> None:
     lines: List[str] = []
     lines.append(f"Plik: {report.file_name}")
     lines.append("")
-    lines.append(f"WERDYKT: {report.verdict}")
+    lines.append(f"WERDYKT PODSUMOWUJĄCY: {report.verdict}")
     lines.append(f"Wynik łączny (Score): {report.total_score:.2f}%")
     lines.append("")
 
     # Wylicz dodatkowe metryki z metadata
     if report.metadata:
+        ai_detector_verdict = report.metadata.get('ai_detector_verdict', 'N/A')
+        ai_detector_score = report.metadata.get('ai_detector_score', 0.0)
+        deepfake_verdict = report.metadata.get('deepfake_verdict', 'N/A')
+        deepfake_score = report.metadata.get('deepfake_score', 0.0)
+
+        lines.append("--- WERDYKTY CZĄSTKOWE ---")
+        lines.append(f"AI DETECTOR (Scena/Gen): {ai_detector_verdict} ({ai_detector_score:.2f}%)")
+        lines.append(f"DEEPFAKE (Twarz): {deepfake_verdict} ({deepfake_score:.2f}%)")
+        lines.append("")
+
         face_ratio = report.metadata.get('face_ratio', 0.0)
         fake_ratio = report.metadata.get('fake_ratio', 0.0)
         detection_mode = report.metadata.get('detection_mode', 'combined')
@@ -853,7 +889,8 @@ def _run_hf_image_models(image_pil, scope_key: str) -> List[float]:
             if pipe:
                 try:
                     # Fix: CommunityForensics-DeepfakeDet-ViT requires 384x384
-                    target_size = (384, 384) if "CommunityForensics" in model_id else None
+                    # Używamy bardziej elastycznego dopasowania nazwy modelu
+                    target_size = (384, 384) if any(x in model_id for x in ["CommunityForensics", "ViT"]) else None
                     input_img = image_pil
                     if target_size and image_pil.size != target_size:
                         input_img = image_pil.resize(target_size, Image.Resampling.LANCZOS)
@@ -885,7 +922,7 @@ def _run_hf_image_models(image_pil, scope_key: str) -> List[float]:
             pipe = _get_hf_image_pipeline(m_id)
             if pipe:
                 try:
-                    target_size = (384, 384) if "CommunityForensics" in m_id else None
+                    target_size = (384, 384) if any(x in m_id for x in ["CommunityForensics", "ViT"]) else None
                     input_img = image_pil
                     if target_size and image_pil.size != target_size:
                         input_img = image_pil.resize(target_size, Image.Resampling.LANCZOS)
@@ -1102,28 +1139,9 @@ def scan_for_deepfake(
         border_avg = float(np.mean(border_scores)) if border_scores else 0.0
         sharp_avg = float(np.mean(sharpness_scores)) if sharpness_scores else None
 
-        # Oblicz AI scores (Wersja FINAL v3 - Master)
-        face_score_raw = robust_agg(face_scores_hf, "p90") if face_scores_hf else None
-        scene_score_raw = robust_agg(scene_scores_hf, "p90") if scene_scores_hf else None
-        
-        # Safety Gate & Noise Filter
-        face_score = face_score_raw
-        if face_score_raw is not None:
-            # Jeśli średnia jest niska, stłum wynik (filtr szumu/artefaktów)
-            face_avg = float(np.mean(face_scores_hf))
-            if face_avg < 25.0:
-                face_score = face_avg
-            else:
-                face_score = (face_score_raw + face_avg) / 2.0
-
-        scene_score = scene_score_raw
-        if scene_score_raw is not None:
-            scene_avg = float(np.mean(scene_scores_hf))
-            # Scena jest bardzo podatna na szum tła
-            if scene_avg < 35.0:
-                scene_score = scene_avg
-            else:
-                scene_score = (scene_score_raw + scene_avg) / 2.0
+        # Oblicz AI scores
+        face_score = robust_agg(face_scores_hf, "p90") if face_scores_hf else None
+        scene_score = robust_agg(scene_scores_hf, "p90") if scene_scores_hf else None
 
         # Zapisz do details
         details['ai_face_score'] = face_score
@@ -1180,47 +1198,59 @@ def scan_for_deepfake(
 
         details['detection_flags'] = detection_flags
 
-        # Fuzja wszystkich wyników (Wersja FINAL v3 - Master)
+        # Fuzja wszystkich wyników
         features_for_fusion = {
-            "face": face_score,
-            "scene": scene_score,
+            "face": details.get("ai_face_score"),
+            "scene": details.get("ai_scene_score"),
             "video": details.get("ai_video_score"),
         }
         final_score = fuse_scores(features_for_fusion)
-        
-        # Bonus za spójność (Multi-Signal Boost)
-        candidates = [x for x in [face_score, scene_score, details.get("ai_video_score")] if x is not None]
-        if candidates:
-            base_max = max(candidates)
-            threats = [c for c in candidates if c > 45.0]
-            if len(threats) >= 2:
-                final_score = min(100.0, max(final_score, base_max) + 5.0)
-            else:
-                final_score = max(final_score, base_max)
-        
-        # Specjalna obsługa dla Sora/Generacji (brak twarzy + wysoki Scene/Video)
-        if face_score is None or face_score < 20.0:
-            if (scene_score and scene_score > 70.0) or (details.get("ai_video_score") and details.get("ai_video_score") > 70.0):
-                final_score = max(final_score, 75.0)
-                
         details['final_score'] = final_score
 
-        # Werdykt
-        verdict = decision_policy(
+        # --- Rozdzielenie werdyktów (Wersja MASTER) ---
+        
+        # 1. Werdykt AI Detector (Scena / Generacja)
+        ai_detector_score = scene_score if scene_score is not None else 0.0
+        if video_score is not None:
+            # Jeśli mamy wynik wideo, połącz go z wynikiem sceny
+            ai_detector_score = max(ai_detector_score, video_score)
+        
+        ai_detector_verdict = _verdict_from_score(ai_detector_score)
+        details['ai_detector_score'] = ai_detector_score
+        details['ai_detector_verdict'] = ai_detector_verdict
+        
+        # 2. Werdykt Deepfake (Twarz)
+        deepfake_score = face_score if face_score is not None else 0.0
+        deepfake_verdict = _verdict_from_score(deepfake_score)
+        details['deepfake_score'] = deepfake_score
+        details['deepfake_verdict'] = deepfake_verdict
+        
+        # 3. Werdykt Podsumowujący (Finalny)
+        # Używamy logiki decision_policy na final_score, ale z uwzględnieniem dominującego zagrożenia
+        final_verdict_raw = decision_policy(
             final_score,
             details,
             policy=getattr(config, 'DECISION_POLICY', 'high_precision')
         )
-        details['verdict'] = verdict
+        
+        # Formatowanie werdyktu podsumowującego zgodnie z życzeniem użytkownika
+        if deepfake_score > ai_detector_score and deepfake_score > 30:
+            summary_verdict = f"DEEPFAKE na {deepfake_score:.1f}%"
+        elif ai_detector_score > 30:
+            summary_verdict = f"AI GENERACJA na {ai_detector_score:.1f}%"
+        else:
+            summary_verdict = f"REAL (Score: {final_score:.1f}%)"
+            
+        details['verdict'] = summary_verdict
+        details['summary_verdict'] = summary_verdict
 
-        # Oblicz fake_ratio (proporcja klatek z twarzą, które mają wysoki wynik)
+        # Oblicz fake_ratio
         fake_ratio = 0.0
         if face_scores_hf:
-            # Uznajemy, że wynik > 50% to podejrzenie fake
-            fake_frames = sum(1 for s in face_scores_hf if s > 50)
-            fake_ratio = (fake_frames / len(face_scores_hf)) * 100.0
+            fake_count = sum(1 for s in face_scores_hf if s > 50)
+            fake_ratio = (fake_count / len(face_scores_hf)) * 100.0
 
-        return verdict, final_score, fake_ratio, details
+        return summary_verdict, final_score, fake_ratio, details
 
     except Exception as e:
         print(f"[MAIN ANALYSIS ERROR] {video_path}: {e}")
