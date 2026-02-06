@@ -122,7 +122,11 @@ SORA_DETECTION_ENABLED = True
 SORA_SCENE_THRESHOLD = 85.0
 SORA_MIN_FRAMES = 10
 
+# Watermark Detection Configuration
+# NOTE: EasyOCR on CPU is very slow (~5-10 sec per frame)
+# With STRIDE=5, scanning 300 frames = 60 OCR calls = ~5-10 minutes per video
+# Reduced to STRIDE=15 (8 OCR calls) for acceptable performance on CPU (~30 sec per video)
 WATERMARK_KEYWORDS = ["sora", "openai", "generated", "ai video", "made with", "ai generated"]
-WATERMARK_MAX_FRAMES = 300
-WATERMARK_STRIDE = 5
+WATERMARK_MAX_FRAMES = 120  # Reduced from 300 to prevent hanging
+WATERMARK_STRIDE = 15        # Increased from 5 to reduce OCR calls
 WATERMARK_MIN_SAVE_GAP_SEC = 1
