@@ -9,6 +9,7 @@ Dostosowane do wytycznych:
 - Zapisywanie na dysk wersji oryginalnej i przefiltrowanej po pomyślnej agresywnej detekcji.
 - Template Matching dla graficznych znaków wodnych (logo).
 - Śledzenie ruchu napisów (pojawianie się, znikanie, ruch, statyczność).
+- Ekstremalne radzenie sobie z jasnym, białym tłem.
 """
 
 from __future__ import annotations
@@ -44,19 +45,16 @@ class TextTracker:
             self.history[type_id] = []
             status = "NOWY"
         else:
-            # Sortujemy w razie out-of-order skanowania (faza 2)
             self.history[type_id].sort(key=lambda x: x['frame'])
-            
-            # Szukamy chronologicznie najbliższej detekcji do obecnej
             closest_record = min(self.history[type_id], key=lambda x: abs(x['frame'] - frame_idx))
             
             last_cx, last_cy = closest_record['centroid']
             dist = math.hypot(cx - last_cx, cy - last_cy)
             frames_diff = abs(frame_idx - closest_record['frame'])
             
-            if frames_diff > 30:  # Brak detekcji przez dłuższą chwilę
+            if frames_diff > 30: 
                 status = "POJAWIENIE"
-            elif dist < 25:       # Bardzo małe przesunięcie = watermark przyklejony do UI
+            elif dist < 25:       
                 status = "STATYCZNY"
             else:
                 status = "RUCHOMY"
@@ -216,36 +214,55 @@ def _preprocess_for_ocr(roi_bgr: np.ndarray) -> np.ndarray:
 
 
 def _get_advanced_filters(frame_bgr: np.ndarray) -> List[Tuple[str, np.ndarray]]:
-    """Zaawansowane techniki Image Processing pod wyciąganie znaków z kompresji, cieni i jaskrawych środowisk."""
+    """Zaawansowane techniki Image Processing pod wyciąganie znaków z kompresji, cieni i jaskrawych/białych środowisk."""
     filters = []
     try:
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         
-        # 1. Adaptive Thresholding (świetne na nierówne oświetlenie/cienie)
+        # 1. Adaptive Thresholding 
         adapt_thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5)
         filters.append(("AGGR-ADAPT-THRESH", cv2.cvtColor(adapt_thresh, cv2.COLOR_GRAY2BGR)))
         
-        # 2. Morphological Top-Hat (wyciąga małe jasne litery z ciemnego tła, niweluje cienie dużych obiektów)
+        # 2. Morphological Top-Hat 
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
         tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
         tophat_norm = cv2.normalize(tophat, None, 0, 255, cv2.NORM_MINMAX)
         filters.append(("AGGR-TOPHAT", cv2.cvtColor(tophat_norm, cv2.COLOR_GRAY2BGR)))
         
-        # 3. Morphological Black-Hat (wyciąga ciemne napisy z jasnego tła)
+        # 3. Morphological Black-Hat 
         blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
         blackhat_norm = cv2.normalize(blackhat, None, 0, 255, cv2.NORM_MINMAX)
         filters.append(("AGGR-BLACKHAT", cv2.cvtColor(blackhat_norm, cv2.COLOR_GRAY2BGR)))
         
-        # 4. Unsharp Masking (Wyostrzenie rozmytych/skompresowanych krawędzi znaków)
+        # 4. Unsharp Masking 
         gaussian = cv2.GaussianBlur(frame_bgr, (9,9), 10.0)
         sharpened = cv2.addWeighted(frame_bgr, 1.5, gaussian, -0.5, 0)
         filters.append(("AGGR-SHARPEN", sharpened))
         
-        # 5. Edge Enhancement (Kontury z Laplace'a nałożone na oryginał)
+        # 5. Edge Enhancement 
         laplacian = cv2.Laplacian(gray, cv2.CV_8U)
         lap_bgr = cv2.cvtColor(laplacian, cv2.COLOR_GRAY2BGR)
         edge_enhanced = cv2.addWeighted(frame_bgr, 1.0, lap_bgr, 0.8, 0)
         filters.append(("AGGR-EDGE", edge_enhanced))
+
+        # 6. EXTREME WHITE BACKGROUND FIX (Gamma + Invert CLAHE)
+        # Przy bardzo jasnym tle (jak słońce, chmury, śnieg) obniżamy jasność przez krzywą gammy (przyciemniamy),
+        # żeby biały znak wodny zaczął odstawać, a następnie odwracamy kolory by napis stał się czarny i przepuszczamy przez CLAHE.
+        gamma = 0.4 # Silne przyciemnienie
+        inv_gamma = 1.0 / gamma
+        table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+        darkened = cv2.LUT(frame_bgr, table)
+        dark_inv = cv2.bitwise_not(darkened)
+        dark_inv_clahe = _preprocess_for_ocr(dark_inv)
+        filters.append(("AGGR-EXTREME-WHITE", dark_inv_clahe))
+
+        # 7. Localized Background Subtraction (Tło lokalne odjęte)
+        # Wykorzystywane aby usunąć gradient szarości nieba i zostawić twarde znaki
+        bg = cv2.medianBlur(gray, 51) 
+        diff = cv2.absdiff(gray, bg)
+        diff_norm = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX)
+        diff_bgr = cv2.cvtColor(diff_norm, cv2.COLOR_GRAY2BGR)
+        filters.append(("AGGR-BGSUB", diff_bgr))
         
     except Exception:
         pass
@@ -282,7 +299,7 @@ def _perform_scan(frame_original, confidence, keywords, versions_to_scan, scale_
     found_words_this_frame = set()
     
     for source_name, base_image in versions_to_scan:
-        # a) Szukanie graficznych logo (Template Matching, zawsze na 1.0 scale)
+        # a) Szukanie graficznych logo (Template Matching)
         tpl_boxes = _detect_template_watermarks(base_image, confidence)
         for det in tpl_boxes:
             if det["type"] not in found_words_this_frame:
@@ -324,7 +341,6 @@ def _perform_scan(frame_original, confidence, keywords, versions_to_scan, scale_
                         break
                         
                 if matched_keyword != "UNKNOWN" and matched_keyword not in found_words_this_frame:
-                    # Skalowanie w dół dla poprawnego wyświetlenia na oryginalnej klatce
                     x1 = int(bbox[0][0] / scale_factor)
                     y1 = int(bbox[0][1] / scale_factor)
                     x2 = int(bbox[2][0] / scale_factor)
@@ -400,16 +416,22 @@ def scan_for_watermarks(
             if progress_callback and is_video and frame_idx % 10 == 0:
                 progress_callback(frame_idx, total_frames)
 
-            # Pobieramy próbkę tylko co określoną liczbę klatek
             if is_video and frame_idx % sample_rate != 0 and frame_idx != 1:
                 continue
 
             now_sec = frame_idx / float(fps) if is_video else 0.0
             
+            # W fazie 1 dodajemy szybki filtr gamma do białych teł by zwiększyć szansę już na wejściu bez czekania na AGGR
+            gamma = 0.5
+            inv_gamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+            darkened = cv2.LUT(frame, table)
+            
             versions_to_scan = [
                 ("OCR-RAW", frame),
                 ("OCR-CLAHE", _preprocess_for_ocr(frame)),
-                ("OCR-INV", cv2.bitwise_not(frame))
+                ("OCR-INV", cv2.bitwise_not(frame)),
+                ("OCR-DARK", darkened)
             ]
             
             frame_detections = _perform_scan(frame, confidence, keywords, versions_to_scan, scale_factor=1.0)
@@ -419,11 +441,9 @@ def scan_for_watermarks(
 
             frame_to_draw = frame.copy()
 
-            # Rysowanie i logowanie FAZY 1
             for det in frame_detections:
                 x1, y1, x2, y2 = det["bbox"]
                 
-                # Ocena ruchu watermarku
                 motion_status = tracker.update(frame_idx, det['type'], det['bbox'])
                 
                 color = (0, 255, 0)
@@ -458,8 +478,17 @@ def scan_for_watermarks(
 
         # ==========================================
         # FAZA 2: Szczegółowa Analiza (Zaawansowana)
+        # Dla obrazków robimy też Faze 2 automatycznie, jeśli 'detailed_scan' i brak detekcji,
+        # dla filmów tylko wtedy gdy detections_count > 0.
         # ==========================================
-        if detailed_scan and is_video and detections_count > 0 and missed_frames and not (check_stop and check_stop()):
+        run_aggr = False
+        if detailed_scan and missed_frames and not (check_stop and check_stop()):
+            if not is_video:
+                run_aggr = True  # Zawsze dociskamy zdjęcia jak nic nie znaleziono
+            elif detections_count > 0:
+                run_aggr = True  # Wideo dociskamy tylko jak jest dowód na innej klatce
+
+        if run_aggr:
             for i, m_idx in enumerate(missed_frames):
                 if check_stop and check_stop():
                     break
@@ -474,16 +503,15 @@ def scan_for_watermarks(
                 
                 now_sec = m_idx / float(fps)
                 
-                # Zaawansowane filtry + skalowanie x1.5 pod OCR malutkich napisów
                 aggr_versions = _get_advanced_filters(frame)
                 
-                # Dodajemy też oryginalne i czarno-białe dla pewności
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 _, bw = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
                 aggr_versions.append(("AGGR-BW", cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)))
                 aggr_versions.append(("AGGR-ORIG", frame))
                 
-                frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions, scale_factor=1.5)
+                # Dodatkowa super rozdzielczość x2.0 pod kątem zblendowanych napisów Sora na niebie/chmurach
+                frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions, scale_factor=2.0)
                 
                 if frame_detections:
                     frame_to_draw_orig = frame.copy()
@@ -520,7 +548,7 @@ def scan_for_watermarks(
                         dets_by_source[base_source].append(det)
                         
                         csv_writer.writerow([
-                            os.path.basename(media_path), "Video (Aggr)",
+                            os.path.basename(media_path), "Video (Aggr)" if is_video else "Image (Aggr)",
                             m_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], motion_status, save_path_orig
                         ])
                         
