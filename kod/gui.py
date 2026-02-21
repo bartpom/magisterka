@@ -13,6 +13,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QPushButton, QCheckBox, QGroupBox, QListWidget,
     QProgressBar, QTextEdit, QFileDialog, QMessageBox, QAbstractItemView,
+    QTableWidget, QTableWidgetItem, QHeaderView, QDoubleSpinBox, QSpinBox, QLabel,
+    QFormLayout
 )
 
 import config
@@ -102,6 +104,20 @@ QListWidget {
 }
 QListWidget::item:selected { background-color: #313244; color: #89b4fa; }
 QListWidget::item:hover    { background-color: #292938; }
+QTableWidget {
+    background-color: #181825; color: #cdd6f4;
+    border: 1px solid #45475a; border-radius: 6px;
+    gridline-color: #313244;
+}
+QTableWidget::item:selected { background-color: #313244; color: #89b4fa; }
+QHeaderView::section {
+    background-color: #313244; color: #cdd6f4;
+    border: 1px solid #45475a; padding: 4px; font-weight: bold;
+}
+QDoubleSpinBox, QSpinBox {
+    background-color: #313244; color: #cdd6f4;
+    border: 1px solid #45475a; border-radius: 4px; padding: 2px;
+}
 QTextEdit {
     background-color: #11111b; color: #a6e3a1;
     border: 1px solid #45475a; border-radius: 6px;
@@ -163,6 +179,20 @@ QListWidget {
 }
 QListWidget::item:selected { background-color: #c8d4f5; color: #1e66f5; }
 QListWidget::item:hover    { background-color: #e6e9ef; }
+QTableWidget {
+    background-color: #dce0e8; color: #4c4f69;
+    border: 1px solid #bcc0cc; border-radius: 6px;
+    gridline-color: #bcc0cc;
+}
+QTableWidget::item:selected { background-color: #c8d4f5; color: #1e66f5; }
+QHeaderView::section {
+    background-color: #e6e9ef; color: #4c4f69;
+    border: 1px solid #bcc0cc; padding: 4px; font-weight: bold;
+}
+QDoubleSpinBox, QSpinBox {
+    background-color: #e6e9ef; color: #4c4f69;
+    border: 1px solid #bcc0cc; border-radius: 4px; padding: 2px;
+}
 QTextEdit {
     background-color: #e6e9ef; color: #4c4f69;
     border: 1px solid #bcc0cc; border-radius: 6px;
@@ -207,6 +237,8 @@ class AnalysisWorker(QtCore.QThread):
         do_forensic: bool,
         do_watermark: bool,
         run_dir: str,
+        confidence: float,
+        sample_rate: int,
         parent=None,
     ):
         super().__init__(parent)
@@ -215,6 +247,8 @@ class AnalysisWorker(QtCore.QThread):
         self._do_forensic = do_forensic
         self._do_watermark = do_watermark
         self._run_dir = run_dir
+        self._confidence = confidence
+        self._sample_rate = sample_rate
         self._stop = False
 
     def stop(self) -> None:
@@ -227,8 +261,9 @@ class AnalysisWorker(QtCore.QThread):
         fn = getattr(ocr_detector, "scan_for_watermarks", None)
         if callable(fn):
             try:
-                self.log_line.emit("[OCR] Start detekcji znaków wodnych…")
-                res = fn(path, check_stop=lambda: self._stop, progress_callback=None)
+                self.log_line.emit(f"[OCR] Start detekcji znaków wodnych (conf={self._confidence}, sample_rate={self._sample_rate})…")
+                # Przekazanie przywróconych parametrów
+                res = fn(path, check_stop=lambda: self._stop, progress_callback=None, confidence=self._confidence, sample_rate=self._sample_rate)
                 return res if isinstance(res, dict) else {"watermark_raw": res}
             except Exception as e:
                 self.log_line.emit(f"[OCR] Błąd detekcji watermarków: {e}")
@@ -244,8 +279,7 @@ class AnalysisWorker(QtCore.QThread):
                 self.progress.emit(int(curr), int(tot))
 
             try:
-                # Wywołanie zgodne z nowym API ai_detector.scan_for_deepfake:
-                # zwraca (verdict: str, final_score: float, fake_ratio: float, details: dict)
+                # Wywołanie zgodne z nowym API ai_detector.scan_for_deepfake
                 res = ai_detector.scan_for_deepfake(
                     path,
                     progress_callback=cb,
@@ -260,7 +294,6 @@ class AnalysisWorker(QtCore.QThread):
                     details.setdefault("raw_final_score", details.get("final_score", score))
                     details.setdefault("fake_ratio", fake_ratio)
                 elif isinstance(res, tuple) and len(res) == 2:
-                    # Starszy format zwrotny (AiResult, ForensicResult)
                     ai_res, for_res = res
                     details = {
                         "status": "DONE",
@@ -306,8 +339,8 @@ class AnalysisWorker(QtCore.QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AI / Deepfake Detector")
-        self.resize(1100, 720)
+        self.setWindowTitle("AI / Deepfake Detector & Watermark (PyQt6)")
+        self.resize(1100, 760)
 
         self.worker: Optional[AnalysisWorker] = None
         self.files: list[str] = []
@@ -338,17 +371,40 @@ class MainWindow(QMainWindow):
         top.addWidget(self.btn_pick_folder)
 
         self.grp_opts = QGroupBox("Ustawienia analizy")
-        opts_lay = QHBoxLayout(self.grp_opts)
+        opts_lay = QVBoxLayout(self.grp_opts)
         opts_lay.setContentsMargins(8, 4, 8, 4)
+        
+        # Checkboxy
+        chk_lay = QHBoxLayout()
         self.chk_ai        = QCheckBox("Analiza AI (twarz/scena/wideo)")
         self.chk_ai.setChecked(True)
         self.chk_forensic  = QCheckBox("Forensic / biometria")
         self.chk_forensic.setChecked(True)
         self.chk_watermark = QCheckBox("Znaki wodne (OCR/YOLO)")
-        self.chk_watermark.setChecked(False)
-        for chk in (self.chk_ai, self.chk_forensic, self.chk_watermark):
-            opts_lay.addWidget(chk)
-        opts_lay.addStretch()
+        self.chk_watermark.setChecked(True) # Domyślnie włączone, bo o to prosił user
+        chk_lay.addWidget(self.chk_ai)
+        chk_lay.addWidget(self.chk_forensic)
+        chk_lay.addWidget(self.chk_watermark)
+        opts_lay.addLayout(chk_lay)
+
+        # Przywrócone opcje Watermark
+        param_lay = QFormLayout()
+        
+        self.spin_conf = QDoubleSpinBox()
+        self.spin_conf.setRange(0.1, 1.0)
+        self.spin_conf.setSingleStep(0.05)
+        self.spin_conf.setValue(0.60) # Domyślnie z pliku PDF
+        self.spin_conf.setToolTip("Minimalna pewność OCR")
+        
+        self.spin_sample = QSpinBox()
+        self.spin_sample.setRange(1, 300)
+        self.spin_sample.setValue(30) # Domyślnie z pliku PDF
+        self.spin_sample.setToolTip("Odstęp próbkowania klatek (co X klatkę)")
+        
+        param_lay.addRow("OCR Confidence:", self.spin_conf)
+        param_lay.addRow("Sample rate:", self.spin_sample)
+        opts_lay.addLayout(param_lay)
+
         top.addWidget(self.grp_opts, 1)
 
         self.chk_dark = QCheckBox("🌙 Ciemny")
@@ -368,19 +424,27 @@ class MainWindow(QMainWindow):
         self.btn_stop.clicked.connect(self.stop_analysis)
         top.addWidget(self.btn_stop)
 
-        # ---- splitter: file list + log ----
+        # ---- splitter: table + log ----
         splitter = QSplitter(Qt.Orientation.Vertical)
         root.addWidget(splitter, 1)
 
-        self.list_files = QListWidget()
-        self.list_files.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.list_files.setAlternatingRowColors(True)
-        splitter.addWidget(self.list_files)
+        # PRZYWRÓCONA TABELA zamiast QListWidget
+        self.table_results = QTableWidget()
+        self.table_results.setColumnCount(4)
+        self.table_results.setHorizontalHeaderLabels(["Plik", "Typ", "Liczba Detekcji (WM)", "Ścieżka CSV/Raport"])
+        self.table_results.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table_results.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table_results.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table_results.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.table_results.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table_results.setAlternatingRowColors(True)
+        splitter.addWidget(self.table_results)
 
         self.logView = QTextEdit()
         self.logView.setReadOnly(True)
         splitter.addWidget(self.logView)
-        splitter.setSizes([240, 360])
+        splitter.setSizes([300, 300])
 
         # ---- bottom bar ----
         bottom = QHBoxLayout()
@@ -393,7 +457,13 @@ class MainWindow(QMainWindow):
         self.progressBar.setFormat("%p%")
         bottom.addWidget(self.progressBar, 1)
 
-        self.btn_open_report = QPushButton("📄 Otwórz raport")
+        # Przywrócone Otwórz Output
+        self.btn_open_folder = QPushButton("📂 Open Output Folder")
+        self.btn_open_folder.clicked.connect(self.open_output_folder)
+        self.btn_open_folder.setEnabled(False)
+        bottom.addWidget(self.btn_open_folder)
+
+        self.btn_open_report = QPushButton("📄 Otwórz raport pliku")
         self.btn_open_report.clicked.connect(self.open_selected_report)
         bottom.addWidget(self.btn_open_report)
 
@@ -430,8 +500,22 @@ class MainWindow(QMainWindow):
                 continue
             self.files_set.add(ap)
             self.files.append(ap)
-            self.list_files.addItem(ap)
+            
+            # Dodaj wiersz do tabeli
+            row = self.table_results.rowCount()
+            self.table_results.insertRow(row)
+            
+            fname = os.path.basename(ap)
+            ext = os.path.splitext(fname)[1].lower()
+            file_type = "Video" if ext in {".mp4", ".mkv", ".avi", ".webm"} else "Image"
+            
+            self.table_results.setItem(row, 0, QTableWidgetItem(fname))
+            self.table_results.setItem(row, 1, QTableWidgetItem(file_type))
+            self.table_results.setItem(row, 2, QTableWidgetItem("-"))
+            self.table_results.setItem(row, 3, QTableWidgetItem("-"))
+            
             added += 1
+            
         if added:
             self.btn_start.setEnabled(True)
             self.append_log(f"> Dodano {added} plik(ów). Razem: {len(self.files)}.")
@@ -584,6 +668,7 @@ class MainWindow(QMainWindow):
         details["watermark_found"]  = bool(self._details_get(details, "watermark_found"))
         details["watermark_label"]  = self._details_get(details, "watermark_label")
         details["watermark_folder"] = self._details_get(details, "watermark_folder")
+        details["watermark_count"]  = self._details_get(details, "watermark_count", "watermarks_detected")
         return details
 
     @staticmethod
@@ -673,6 +758,8 @@ class MainWindow(QMainWindow):
             return
         run_dir = ai_detector.begin_run()
         self.current_run_dir = run_dir
+        self.btn_open_folder.setEnabled(True) # Odblokowujemy przycisk
+        
         self.append_log(f"> Run folder: {run_dir}")
         self.thresholds_path = os.path.join(run_dir, "_calibration_thresholds.json")
         if calibrate_thresholds is not None:
@@ -685,12 +772,18 @@ class MainWindow(QMainWindow):
             btn.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.progressBar.setValue(0)
+        
+        # Pobieramy ustawienia
         do_ai        = self.chk_ai.isChecked()
         do_forensic  = self.chk_forensic.isChecked()
         do_watermark = self.chk_watermark.isChecked()
+        conf_val     = self.spin_conf.value()
+        sample_val   = self.spin_sample.value()
+        
         self.append_log(f"> Rozpoczynam analizę… (AI={do_ai}, Forensic={do_forensic}, Watermark={do_watermark})")
         self.worker = AnalysisWorker(
-            self.files, bool(do_ai), bool(do_forensic), bool(do_watermark), run_dir, self
+            self.files, bool(do_ai), bool(do_forensic), bool(do_watermark), run_dir, 
+            confidence=conf_val, sample_rate=sample_val, parent=self
         )
         self.worker.progress.connect(self.on_progress)
         self.worker.file_started.connect(self.on_file_started)
@@ -704,10 +797,25 @@ class MainWindow(QMainWindow):
             self.worker.stop()
             self.append_log("> Przerywam analizę…")
 
+    def open_output_folder(self) -> None:
+        if not self.current_run_dir or not os.path.isdir(self.current_run_dir):
+            QMessageBox.information(self, "Brak Outputu", "Brak aktywnego folderu z raportami.")
+            return
+        path_to_open = os.path.abspath(self.current_run_dir)
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(path_to_open)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                QtCore.QProcess.startDetached("open",     [path_to_open])
+            else:
+                QtCore.QProcess.startDetached("xdg-open", [path_to_open])
+        except Exception as e:
+            QMessageBox.warning(self, "Błąd", f"Nie udało się otworzyć: {e}")
+
     def open_selected_report(self) -> None:
-        items = self.list_files.selectedIndexes()
+        items = self.table_results.selectedItems()
         if not items:
-            QMessageBox.information(self, "Brak wyboru", "Zaznacz plik na liście.")
+            QMessageBox.information(self, "Brak wyboru", "Zaznacz plik w tabeli.")
             return
         idx = items[0].row()
         path_to_open = (
@@ -767,6 +875,19 @@ class MainWindow(QMainWindow):
         folder = d.get("folder_path") or d.get("watermark_folder")
         if folder:
             self.report_paths[idx] = folder
+            
+        # Aktualizacja tabeli z wynikami
+        count = d.get("watermark_count")
+        if count is not None:
+            self.table_results.setItem(idx, 2, QTableWidgetItem(str(count)))
+        elif d.get("watermark_found"):
+            self.table_results.setItem(idx, 2, QTableWidgetItem("Wykryto (nieznana ilość)"))
+        else:
+            self.table_results.setItem(idx, 2, QTableWidgetItem("Brak"))
+            
+        report_file = d.get("csv_path", folder if folder else "Brak")
+        self.table_results.setItem(idx, 3, QTableWidgetItem(str(report_file)))
+            
         self.per_file_summaries[idx] = self._make_summary_block(idx, d)
         verdict = d.get("verdict", "UNKNOWN")
         score   = d.get("final_score")
