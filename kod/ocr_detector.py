@@ -5,15 +5,17 @@ Detekcja znaków wodnych / napisów „generatora” w obrazach i wideo.
 Dostosowane do wytycznych:
 - Zapis CSV z detekcjami.
 - Konfiguracja progu pewności (confidence) oraz próbkowania (sample_rate).
-- Opcjonalne drugie przejście (szczegółowa analiza dwufazowa z ekstremalnym kontrastem).
+- Opcjonalne drugie przejście (szczegółowa analiza dwufazowa z zaawansowanymi filtrami morfologicznymi).
 - Zapisywanie na dysk wersji oryginalnej i przefiltrowanej po pomyślnej agresywnej detekcji.
 - Template Matching dla graficznych znaków wodnych (logo).
+- Śledzenie ruchu napisów (pojawianie się, znikanie, ruch, statyczność).
 """
 
 from __future__ import annotations
 
 import os
 import csv
+import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Callable
 
@@ -26,6 +28,45 @@ import config
 _OCR_READER = None
 _OCR_ENGINE_TYPE = None
 _YOLO_MODEL = None
+
+
+class TextTracker:
+    """Śledzi pojawianie się, znikanie i ruch znaków wodnych w czasie."""
+    def __init__(self):
+        self.history = {}
+        
+    def update(self, frame_idx, type_id, bbox):
+        x1, y1, x2, y2 = bbox
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        
+        if type_id not in self.history:
+            self.history[type_id] = []
+            status = "NOWY"
+        else:
+            # Sortujemy w razie out-of-order skanowania (faza 2)
+            self.history[type_id].sort(key=lambda x: x['frame'])
+            
+            # Szukamy chronologicznie najbliższej detekcji do obecnej
+            closest_record = min(self.history[type_id], key=lambda x: abs(x['frame'] - frame_idx))
+            
+            last_cx, last_cy = closest_record['centroid']
+            dist = math.hypot(cx - last_cx, cy - last_cy)
+            frames_diff = abs(frame_idx - closest_record['frame'])
+            
+            if frames_diff > 30:  # Brak detekcji przez dłuższą chwilę
+                status = "POJAWIENIE"
+            elif dist < 25:       # Bardzo małe przesunięcie = watermark przyklejony do UI
+                status = "STATYCZNY"
+            else:
+                status = "RUCHOMY"
+                
+        self.history[type_id].append({
+            "frame": frame_idx,
+            "centroid": (cx, cy),
+            "bbox": bbox
+        })
+        return status
 
 
 def _get_reader():
@@ -174,6 +215,44 @@ def _preprocess_for_ocr(roi_bgr: np.ndarray) -> np.ndarray:
         return roi_bgr
 
 
+def _get_advanced_filters(frame_bgr: np.ndarray) -> List[Tuple[str, np.ndarray]]:
+    """Zaawansowane techniki Image Processing pod wyciąganie znaków z kompresji, cieni i jaskrawych środowisk."""
+    filters = []
+    try:
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        
+        # 1. Adaptive Thresholding (świetne na nierówne oświetlenie/cienie)
+        adapt_thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5)
+        filters.append(("AGGR-ADAPT-THRESH", cv2.cvtColor(adapt_thresh, cv2.COLOR_GRAY2BGR)))
+        
+        # 2. Morphological Top-Hat (wyciąga małe jasne litery z ciemnego tła, niweluje cienie dużych obiektów)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (13, 5))
+        tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
+        tophat_norm = cv2.normalize(tophat, None, 0, 255, cv2.NORM_MINMAX)
+        filters.append(("AGGR-TOPHAT", cv2.cvtColor(tophat_norm, cv2.COLOR_GRAY2BGR)))
+        
+        # 3. Morphological Black-Hat (wyciąga ciemne napisy z jasnego tła)
+        blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+        blackhat_norm = cv2.normalize(blackhat, None, 0, 255, cv2.NORM_MINMAX)
+        filters.append(("AGGR-BLACKHAT", cv2.cvtColor(blackhat_norm, cv2.COLOR_GRAY2BGR)))
+        
+        # 4. Unsharp Masking (Wyostrzenie rozmytych/skompresowanych krawędzi znaków)
+        gaussian = cv2.GaussianBlur(frame_bgr, (9,9), 10.0)
+        sharpened = cv2.addWeighted(frame_bgr, 1.5, gaussian, -0.5, 0)
+        filters.append(("AGGR-SHARPEN", sharpened))
+        
+        # 5. Edge Enhancement (Kontury z Laplace'a nałożone na oryginał)
+        laplacian = cv2.Laplacian(gray, cv2.CV_8U)
+        lap_bgr = cv2.cvtColor(laplacian, cv2.COLOR_GRAY2BGR)
+        edge_enhanced = cv2.addWeighted(frame_bgr, 1.0, lap_bgr, 0.8, 0)
+        filters.append(("AGGR-EDGE", edge_enhanced))
+        
+    except Exception:
+        pass
+        
+    return filters
+
+
 def _make_session_dir(input_path: str) -> str:
     filename_clean = os.path.basename(input_path).replace(".", "_")
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -184,10 +263,10 @@ def _make_session_dir(input_path: str) -> str:
     return out_dir
 
 
-def _perform_scan(frame_original, confidence, keywords, versions_to_scan):
+def _perform_scan(frame_original, confidence, keywords, versions_to_scan, scale_factor=1.0):
     frame_detections = []
     
-    # 1) YOLO watermark
+    # 1) YOLO watermark (zawsze na oryginalnej skali)
     yolo_boxes = _detect_yolo_watermark(frame_original, min_conf=confidence)
     for (x1, y1, x2, y2, conf, label) in yolo_boxes:
         frame_detections.append({
@@ -198,20 +277,26 @@ def _perform_scan(frame_original, confidence, keywords, versions_to_scan):
             "source": "YOLO"
         })
 
-    # 2) OCR & Template Matching na każdej wersji obrazu
+    # 2) OCR & Template
     reader = _get_reader()
     found_words_this_frame = set()
     
-    for source_name, image_to_scan in versions_to_scan:
-        # a) Szukanie graficznych logo (Template Matching)
-        tpl_boxes = _detect_template_watermarks(image_to_scan, confidence)
+    for source_name, base_image in versions_to_scan:
+        # a) Szukanie graficznych logo (Template Matching, zawsze na 1.0 scale)
+        tpl_boxes = _detect_template_watermarks(base_image, confidence)
         for det in tpl_boxes:
             if det["type"] not in found_words_this_frame:
                 det["source"] = f"TEMPLATE-{source_name}"
                 frame_detections.append(det)
                 found_words_this_frame.add(det["type"])
 
-        # b) OCR
+        # b) Skalowanie (Super Resolution dla lepszego OCR małych znaków)
+        if scale_factor != 1.0:
+            image_to_scan = cv2.resize(base_image, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
+        else:
+            image_to_scan = base_image
+
+        # c) OCR
         if reader is not None:
             try:
                 if _OCR_ENGINE_TYPE == "paddle":
@@ -239,10 +324,11 @@ def _perform_scan(frame_original, confidence, keywords, versions_to_scan):
                         break
                         
                 if matched_keyword != "UNKNOWN" and matched_keyword not in found_words_this_frame:
-                    x1 = int(bbox[0][0])
-                    y1 = int(bbox[0][1])
-                    x2 = int(bbox[2][0])
-                    y2 = int(bbox[2][1])
+                    # Skalowanie w dół dla poprawnego wyświetlenia na oryginalnej klatce
+                    x1 = int(bbox[0][0] / scale_factor)
+                    y1 = int(bbox[0][1] / scale_factor)
+                    x2 = int(bbox[2][0] / scale_factor)
+                    y2 = int(bbox[2][1] / scale_factor)
                     
                     frame_detections.append({
                         "type": matched_keyword,
@@ -272,7 +358,6 @@ def scan_for_watermarks(
     if not cap.isOpened():
         return {"status": "ERROR", "error": "Nie można otworzyć pliku."}
 
-    # Dodano najpopularniejsze AI generatory z internetu
     default_keywords = [
         "SORA", "OPENAI", "GENERATED", "AI VIDEO", "MADE WITH", "AI GENERATED", 
         "RUNWAY", "PIKA", "LUMA", "GEN-2", "TIKTOK", "KWAI", "CAPCUT", "STABLE VIDEO",
@@ -292,10 +377,12 @@ def scan_for_watermarks(
     frame_idx = 0
     detections_count = 0
     found_types = set()
+    
+    tracker = TextTracker()
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
-        csv_writer.writerow(["Plik", "Typ", "Numer klatki", "Timestamp", "Typ watermarku", "Confidence", "Tekst", "Ścieżka zapisu"])
+        csv_writer.writerow(["Plik", "Typ", "Numer klatki", "Timestamp", "Typ watermarku", "Confidence", "Tekst", "Ruch", "Ścieżka zapisu"])
 
         # ==========================================
         # FAZA 1: Skanowanie podstawowe
@@ -325,7 +412,7 @@ def scan_for_watermarks(
                 ("OCR-INV", cv2.bitwise_not(frame))
             ]
             
-            frame_detections = _perform_scan(frame, confidence, keywords, versions_to_scan)
+            frame_detections = _perform_scan(frame, confidence, keywords, versions_to_scan, scale_factor=1.0)
 
             if not frame_detections:
                 missed_frames.append(frame_idx)
@@ -335,11 +422,15 @@ def scan_for_watermarks(
             # Rysowanie i logowanie FAZY 1
             for det in frame_detections:
                 x1, y1, x2, y2 = det["bbox"]
+                
+                # Ocena ruchu watermarku
+                motion_status = tracker.update(frame_idx, det['type'], det['bbox'])
+                
                 color = (0, 255, 0)
                 cv2.rectangle(frame_to_draw, (x1, y1), (x2, y2), color, 3)
                 cv2.putText(
                     frame_to_draw,
-                    f"{det['type']} ({int(det['confidence'] * 100)}%)",
+                    f"{det['type']} [{motion_status}] ({int(det['confidence'] * 100)}%)",
                     (x1, max(0, y1 - 10)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
                 )
@@ -351,7 +442,7 @@ def scan_for_watermarks(
                 save_path = os.path.join(out_dir, fname)
                 csv_writer.writerow([
                     os.path.basename(media_path), "Video" if is_video else "Image",
-                    frame_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], save_path
+                    frame_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], motion_status, save_path
                 ])
                 try:
                     cv2.imwrite(save_path, frame_to_draw)
@@ -366,8 +457,7 @@ def scan_for_watermarks(
                 preview_callback(frame_to_draw, frame_detections)
 
         # ==========================================
-        # FAZA 2: Opcjonalna Szczegółowa Analiza (Dwufazowa)
-        # Uruchamiana gdy włączona opcja i znaleziono cokolwiek w fazie 1
+        # FAZA 2: Szczegółowa Analiza (Zaawansowana)
         # ==========================================
         if detailed_scan and is_video and detections_count > 0 and missed_frames and not (check_stop and check_stop()):
             for i, m_idx in enumerate(missed_frames):
@@ -384,30 +474,28 @@ def scan_for_watermarks(
                 
                 now_sec = m_idx / float(fps)
                 
-                high_contrast = cv2.convertScaleAbs(frame, alpha=2.0, beta=0)
-                low_contrast = cv2.convertScaleAbs(frame, alpha=0.5, beta=0)
+                # Zaawansowane filtry + skalowanie x1.5 pod OCR malutkich napisów
+                aggr_versions = _get_advanced_filters(frame)
+                
+                # Dodajemy też oryginalne i czarno-białe dla pewności
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 _, bw = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-                bw_bgr = cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)
+                aggr_versions.append(("AGGR-BW", cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)))
+                aggr_versions.append(("AGGR-ORIG", frame))
                 
-                aggr_versions = [
-                    ("AGGR-HIGH-CONTRAST", high_contrast),
-                    ("AGGR-LOW-CONTRAST", low_contrast),
-                    ("AGGR-BW", bw_bgr)
-                ]
-                
-                frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions)
+                frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions, scale_factor=1.5)
                 
                 if frame_detections:
-                    # 1. Zapisujemy oryginalną klatkę z nałożonymi obramowaniami
                     frame_to_draw_orig = frame.copy()
                     for det in frame_detections:
                         x1, y1, x2, y2 = det["bbox"]
+                        motion_status = tracker.update(m_idx, det['type'], det['bbox'])
+                        
                         color = (0, 255, 0)
                         cv2.rectangle(frame_to_draw_orig, (x1, y1), (x2, y2), color, 3)
                         cv2.putText(
                             frame_to_draw_orig,
-                            f"{det['type']} [AGGR-ORIG] ({int(det['confidence'] * 100)}%)",
+                            f"{det['type']} [AGGR:{motion_status}]",
                             (x1, max(0, y1 - 10)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
                         )
@@ -422,7 +510,6 @@ def scan_for_watermarks(
                     except Exception:
                         pass
                         
-                    # 2. Zapisujemy odfiltrowane klatki (na których algorytm rzeczywiście zobaczył znak)
                     version_images = dict(aggr_versions)
                     from collections import defaultdict
                     dets_by_source = defaultdict(list)
@@ -434,7 +521,7 @@ def scan_for_watermarks(
                         
                         csv_writer.writerow([
                             os.path.basename(media_path), "Video (Aggr)",
-                            m_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], save_path_orig
+                            m_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], motion_status, save_path_orig
                         ])
                         
                     for src_name, dets in dets_by_source.items():
@@ -446,7 +533,7 @@ def scan_for_watermarks(
                                 cv2.rectangle(img_to_draw, (x1, y1), (x2, y2), color, 3)
                                 cv2.putText(
                                     img_to_draw,
-                                    f"{det['type']} [{src_name}] ({int(det['confidence'] * 100)}%)",
+                                    f"[{src_name}] {det['type']}",
                                     (x1, max(0, y1 - 10)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
                                 )
