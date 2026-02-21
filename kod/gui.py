@@ -244,40 +244,44 @@ class AnalysisWorker(QtCore.QThread):
                 self.progress.emit(int(curr), int(tot))
 
             try:
+                # Wywołanie zgodne z nowym API ai_detector.scan_for_deepfake:
+                # zwraca (verdict: str, final_score: float, fake_ratio: float, details: dict)
                 res = ai_detector.scan_for_deepfake(
                     path,
                     progress_callback=cb,
                     check_stop=lambda: self._stop,
-                    do_face_ai=self._do_face_ai,
-                    do_forensic=self._do_forensic,
-                    run_dir=self._run_dir,
+                    detection_mode="combined",
                 )
-                if isinstance(res, tuple) and len(res) == 2:
+
+                if isinstance(res, tuple) and len(res) == 4:
+                    verdict, score, fake_ratio, det = res
+                    details: dict[str, Any] = det or {}
+                    details["status"] = verdict
+                    details.setdefault("raw_final_score", details.get("final_score", score))
+                    details.setdefault("fake_ratio", fake_ratio)
+                elif isinstance(res, tuple) and len(res) == 2:
+                    # Starszy format zwrotny (AiResult, ForensicResult)
                     ai_res, for_res = res
-                    details: dict[str, Any] = {
+                    details = {
                         "status": "DONE",
-                        "ai_face_score":   getattr(ai_res, "face_score",    None),
-                        "ai_scene_score":  getattr(ai_res, "scene_score",   None),
-                        "ai_video_score":  getattr(ai_res, "video_score",   None),
-                        "ai_combined_score": getattr(ai_res, "combined_max", None),
-                        "jitter_px":       getattr(for_res, "jitter_px",    None),
-                        "blink_per_min":   getattr(for_res, "blink_per_min",None),
-                        "ela_score":       getattr(for_res, "ela_score",    None),
-                        "fft_score":       getattr(for_res, "fft_score",    None),
-                        "border_artifacts":getattr(for_res, "border_artifacts", None),
-                        "face_sharpness":  getattr(for_res, "face_sharpness",None),
+                        "ai_face_score":     getattr(ai_res,  "face_score",       None),
+                        "ai_scene_score":    getattr(ai_res,  "scene_score",      None),
+                        "ai_video_score":    getattr(ai_res,  "video_score",      None),
+                        "ai_combined_score": getattr(ai_res,  "combined_max",     None),
+                        "jitter_px":         getattr(for_res, "jitter_px",        None),
+                        "blink_per_min":     getattr(for_res, "blink_per_min",    None),
+                        "ela_score":         getattr(for_res, "ela_score",        None),
+                        "fft_score":         getattr(for_res, "fft_score",        None),
+                        "border_artifacts":  getattr(for_res, "border_artifacts", None),
+                        "face_sharpness":    getattr(for_res, "face_sharpness",   None),
                     }
                     details.setdefault("raw_final_score", float(getattr(ai_res, "combined_max", 0.0) or 0.0))
                     details.setdefault("fake_ratio", 0.0)
-                elif isinstance(res, tuple) and len(res) == 4:
-                    status, score, fake_ratio, details = res
-                    details = details or {}
-                    details["status"] = status
-                    details.setdefault("raw_final_score", details.get("final_score", score))
-                    details.setdefault("fake_ratio", fake_ratio)
                 else:
-                    raise ValueError(f"Unexpected return type from scan_for_deepfake: {type(res)}")
+                    raise ValueError(f"Nieoczekiwany format zwrotny z scan_for_deepfake: {type(res)}")
+
                 details.setdefault("full_path", os.path.abspath(path))
+
             except Exception as e:
                 self.log_line.emit(f"[BŁĄD] {os.path.basename(path)} (AI): {e}")
                 details = {
