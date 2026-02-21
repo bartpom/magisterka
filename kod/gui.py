@@ -1,4 +1,3 @@
-"""
 # gui.py  (PyQt6 + Modern QSS) - STRICLY WATERMARK DETECTOR + PREVIEW
 import os
 import sys
@@ -641,4 +640,3 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
-"""
