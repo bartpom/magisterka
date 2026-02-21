@@ -3,12 +3,11 @@ ocr_detector.py
 
 Detekcja znaków wodnych / napisów „generatora” w obrazach i wideo.
 Dostosowane do wytycznych:
-- Zapis CSV z detekcjami (Plik, Typ, Numer klatki, Timestamp, Typ watermarku, Confidence, Tekst, Ścieżka).
+- Zapis CSV z detekcjami.
 - Konfiguracja progu pewności (confidence) oraz próbkowania (sample_rate).
-- Przekazywanie na żywo wszystkich skanowanych klatek do podglądu w GUI.
-- Skanowanie podstawowe (RAW, CLAHE, INVERTED).
-- Drugie przejście (agresywne): jeśli wykryto watermark w wideo, pominięte klatki są skanowane m.in. na dużym kontrascie, małym i czarno-białym.
-- Ujednolicony, profesjonalny kolor obramowań detekcji (jasna zieleń).
+- Opcjonalne drugie przejście (szczegółowa analiza dwufazowa z ekstremalnym kontrastem).
+- Zapisywanie na dysk wersji oryginalnej i przefiltrowanej po pomyślnej agresywnej detekcji.
+- Template Matching dla graficznych znaków wodnych (logo).
 """
 
 from __future__ import annotations
@@ -118,6 +117,51 @@ def _detect_yolo_watermark(frame_bgr, min_conf: float) -> List[Tuple[int, int, i
     return detections
 
 
+def _detect_template_watermarks(image_to_scan: np.ndarray, confidence: float) -> List[dict]:
+    templates_dir = getattr(config, "TEMPLATES_DIR", "watermark_templates")
+    if not os.path.exists(templates_dir):
+        try:
+            os.makedirs(templates_dir, exist_ok=True)
+        except Exception:
+            return []
+            
+    detections = []
+    if len(image_to_scan.shape) == 3:
+        gray_frame = cv2.cvtColor(image_to_scan, cv2.COLOR_BGR2GRAY)
+    else:
+        gray_frame = image_to_scan
+        
+    for fname in os.listdir(templates_dir):
+        if not fname.lower().endswith(('.png', '.jpg', '.jpeg')):
+            continue
+            
+        tpl_path = os.path.join(templates_dir, fname)
+        tpl = cv2.imread(tpl_path, cv2.IMREAD_GRAYSCALE)
+        if tpl is None:
+            continue
+            
+        try:
+            res = cv2.matchTemplate(gray_frame, tpl, cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= confidence)
+            h, w = tpl.shape
+            label = os.path.splitext(fname)[0].upper()
+            
+            for pt in zip(*loc[::-1]):
+                x1, y1 = int(pt[0]), int(pt[1])
+                x2, y2 = x1 + w, y1 + h
+                conf = float(res[y1, x1])
+                detections.append({
+                    "type": f"LOGO-{label}",
+                    "confidence": conf,
+                    "text": f"[IMG: {label}]",
+                    "bbox": (x1, y1, x2, y2)
+                })
+        except Exception:
+            pass
+            
+    return detections
+
+
 def _preprocess_for_ocr(roi_bgr: np.ndarray) -> np.ndarray:
     try:
         lab = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2LAB)
@@ -140,12 +184,11 @@ def _make_session_dir(input_path: str) -> str:
     return out_dir
 
 
-def _perform_scan(frame, confidence, keywords, versions_to_scan):
-    """Pomocnicza funkcja realizująca pętlę detekcji na podanych wersjach obrazu."""
+def _perform_scan(frame_original, confidence, keywords, versions_to_scan):
     frame_detections = []
     
     # 1) YOLO watermark
-    yolo_boxes = _detect_yolo_watermark(frame, min_conf=confidence)
+    yolo_boxes = _detect_yolo_watermark(frame_original, min_conf=confidence)
     for (x1, y1, x2, y2, conf, label) in yolo_boxes:
         frame_detections.append({
             "type": label,
@@ -155,11 +198,21 @@ def _perform_scan(frame, confidence, keywords, versions_to_scan):
             "source": "YOLO"
         })
 
-    # 2) OCR
+    # 2) OCR & Template Matching na każdej wersji obrazu
     reader = _get_reader()
-    if reader is not None:
-        found_words_this_frame = set()
-        for source_name, image_to_scan in versions_to_scan:
+    found_words_this_frame = set()
+    
+    for source_name, image_to_scan in versions_to_scan:
+        # a) Szukanie graficznych logo (Template Matching)
+        tpl_boxes = _detect_template_watermarks(image_to_scan, confidence)
+        for det in tpl_boxes:
+            if det["type"] not in found_words_this_frame:
+                det["source"] = f"TEMPLATE-{source_name}"
+                frame_detections.append(det)
+                found_words_this_frame.add(det["type"])
+
+        # b) OCR
+        if reader is not None:
             try:
                 if _OCR_ENGINE_TYPE == "paddle":
                     results = reader.ocr(image_to_scan, cls=False)
@@ -209,6 +262,7 @@ def scan_for_watermarks(
     progress_callback=None, 
     confidence: float = 0.6, 
     sample_rate: int = 30,
+    detailed_scan: bool = False,
     preview_callback: Optional[Callable[[np.ndarray, list], None]] = None
 ) -> Dict[str, Any]:
     
@@ -218,9 +272,11 @@ def scan_for_watermarks(
     if not cap.isOpened():
         return {"status": "ERROR", "error": "Nie można otworzyć pliku."}
 
+    # Dodano najpopularniejsze AI generatory z internetu
     default_keywords = [
         "SORA", "OPENAI", "GENERATED", "AI VIDEO", "MADE WITH", "AI GENERATED", 
-        "RUNWAY", "PIKA", "LUMA", "GEN-2", "TIKTOK", "KWAI", "CAPCUT", "STABLE VIDEO"
+        "RUNWAY", "PIKA", "LUMA", "GEN-2", "TIKTOK", "KWAI", "CAPCUT", "STABLE VIDEO",
+        "KLING", "VEED", "INVIDEO", "KAPWING", "SYNTHID", "MINIMAX", "HAIPER", "DREAMLUX"
     ]
     keywords = [str(k).upper() for k in getattr(config, "WATERMARK_KEYWORDS", default_keywords)]
     
@@ -310,10 +366,10 @@ def scan_for_watermarks(
                 preview_callback(frame_to_draw, frame_detections)
 
         # ==========================================
-        # FAZA 2: Agresywne skanowanie pominiętych klatek
-        # (Uruchamiane tylko, jeśli znaleziono cokolwiek w fazie 1)
+        # FAZA 2: Opcjonalna Szczegółowa Analiza (Dwufazowa)
+        # Uruchamiana gdy włączona opcja i znaleziono cokolwiek w fazie 1
         # ==========================================
-        if is_video and detections_count > 0 and missed_frames and not (check_stop and check_stop()):
+        if detailed_scan and is_video and detections_count > 0 and missed_frames and not (check_stop and check_stop()):
             for i, m_idx in enumerate(missed_frames):
                 if check_stop and check_stop():
                     break
@@ -324,12 +380,10 @@ def scan_for_watermarks(
                     continue
 
                 if progress_callback:
-                    # Sygnalizujemy drugi przebieg na pasku postępu (od nowa)
                     progress_callback(i + 1, len(missed_frames))
                 
                 now_sec = m_idx / float(fps)
                 
-                # Tworzymy ekstremalne wersje kontrastowe
                 high_contrast = cv2.convertScaleAbs(frame, alpha=2.0, beta=0)
                 low_contrast = cv2.convertScaleAbs(frame, alpha=0.5, beta=0)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -344,38 +398,75 @@ def scan_for_watermarks(
                 
                 frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions)
                 
-                frame_to_draw = frame.copy()
-                for det in frame_detections:
-                    x1, y1, x2, y2 = det["bbox"]
-                    color = (0, 255, 0)
-                    cv2.rectangle(frame_to_draw, (x1, y1), (x2, y2), color, 3)
-                    cv2.putText(
-                        frame_to_draw,
-                        f"{det['type']} [AGGR] ({int(det['confidence'] * 100)}%)",
-                        (x1, max(0, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
-                    )
-                    
-                    found_types.add(det['type'])
-                    detections_count += 1
-                    
-                    fname = f"frame_{m_idx}_aggr_t_{now_sec:.2f}s.jpg"
-                    save_path = os.path.join(out_dir, fname)
-                    csv_writer.writerow([
-                        os.path.basename(media_path), "Video (Aggr)",
-                        m_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], save_path
-                    ])
+                if frame_detections:
+                    # 1. Zapisujemy oryginalną klatkę z nałożonymi obramowaniami
+                    frame_to_draw_orig = frame.copy()
+                    for det in frame_detections:
+                        x1, y1, x2, y2 = det["bbox"]
+                        color = (0, 255, 0)
+                        cv2.rectangle(frame_to_draw_orig, (x1, y1), (x2, y2), color, 3)
+                        cv2.putText(
+                            frame_to_draw_orig,
+                            f"{det['type']} [AGGR-ORIG] ({int(det['confidence'] * 100)}%)",
+                            (x1, max(0, y1 - 10)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
+                        )
+                        found_types.add(det['type'])
+                        detections_count += 1
+                        
+                    fname_orig = f"frame_{m_idx}_aggr_orig_t_{now_sec:.2f}s.jpg"
+                    save_path_orig = os.path.join(out_dir, fname_orig)
                     try:
-                        cv2.imwrite(save_path, frame_to_draw)
-                        saved_paths.append(save_path)
+                        cv2.imwrite(save_path_orig, frame_to_draw_orig)
+                        saved_paths.append(save_path_orig)
                     except Exception:
                         pass
-                
-                if preview_callback:
-                    if not frame_detections:
-                         cv2.putText(frame_to_draw, f"Brak detekcji (AGGR klatka {m_idx})", (10, 30), 
-                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,165,255), 2) # Pomarańczowy dla Aggr
-                    preview_callback(frame_to_draw, frame_detections)
+                        
+                    # 2. Zapisujemy odfiltrowane klatki (na których algorytm rzeczywiście zobaczył znak)
+                    version_images = dict(aggr_versions)
+                    from collections import defaultdict
+                    dets_by_source = defaultdict(list)
+                    
+                    for det in frame_detections:
+                        src = det.get("source", "")
+                        base_source = src.replace("TEMPLATE-", "") if src.startswith("TEMPLATE-") else src
+                        dets_by_source[base_source].append(det)
+                        
+                        csv_writer.writerow([
+                            os.path.basename(media_path), "Video (Aggr)",
+                            m_idx, f"{now_sec:.2f}", det['type'], f"{det['confidence']:.2f}", det['text'], save_path_orig
+                        ])
+                        
+                    for src_name, dets in dets_by_source.items():
+                        if src_name in version_images:
+                            img_to_draw = version_images[src_name].copy()
+                            for det in dets:
+                                x1, y1, x2, y2 = det["bbox"]
+                                color = (0, 255, 0)
+                                cv2.rectangle(img_to_draw, (x1, y1), (x2, y2), color, 3)
+                                cv2.putText(
+                                    img_to_draw,
+                                    f"{det['type']} [{src_name}] ({int(det['confidence'] * 100)}%)",
+                                    (x1, max(0, y1 - 10)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
+                                )
+                            
+                            fname_mod = f"frame_{m_idx}_{src_name}_t_{now_sec:.2f}s.jpg"
+                            save_path_mod = os.path.join(out_dir, fname_mod)
+                            try:
+                                cv2.imwrite(save_path_mod, img_to_draw)
+                                saved_paths.append(save_path_mod)
+                            except Exception:
+                                pass
+                                
+                    if preview_callback:
+                        preview_callback(frame_to_draw_orig, frame_detections)
+                else:
+                    if preview_callback:
+                        frame_to_draw_empty = frame.copy()
+                        cv2.putText(frame_to_draw_empty, f"Brak detekcji (AGGR klatka {m_idx})", (10, 30), 
+                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,165,255), 2)
+                        preview_callback(frame_to_draw_empty, [])
 
     cap.release()
 
