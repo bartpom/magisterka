@@ -5,7 +5,7 @@ Detekcja znaków wodnych / napisów „generatora” w obrazach i wideo.
 Dostosowane do wytycznych:
 - Zapis CSV z detekcjami (Plik, Typ, Numer klatki, Timestamp, Typ watermarku, Confidence, Tekst, Ścieżka).
 - Konfiguracja progu pewności (confidence) oraz próbkowania (sample_rate).
-- Przekazywanie klatek do podglądu w GUI na żywo.
+- Przekazywanie na żywo wszystkich skanowanych klatek do podglądu w GUI.
 """
 
 from __future__ import annotations
@@ -164,7 +164,6 @@ def scan_for_watermarks(
     out_dir = _make_session_dir(media_path)
     csv_path = os.path.join(out_dir, "report.csv")
     
-    csv_rows = []
     saved_paths: List[str] = []
     
     frame_idx = 0
@@ -188,6 +187,7 @@ def scan_for_watermarks(
             if progress_callback and is_video and frame_idx % 10 == 0:
                 progress_callback(frame_idx, total_frames)
 
+            # Pobieramy próbkę tylko co określoną liczbę klatek
             if is_video and frame_idx % sample_rate != 0 and frame_idx != 1:
                 continue
 
@@ -211,8 +211,11 @@ def scan_for_watermarks(
             # 2) OCR
             reader = _get_reader()
             if reader is not None:
-                w_margin = int(w * 0.35)
-                h_margin = int(h * 0.25)
+                # Rozszerzamy obszar sprawdzania. 
+                # Zamiast samych małych narożników bierzemy szersze paski (0.45) 
+                # z uwagi na to, że niektóre loga sora / runway są bliżej środka krawędzi
+                w_margin = int(w * 0.45)
+                h_margin = int(h * 0.35)
                 
                 smart_corners = [
                     (frame[0:h_margin, 0:w_margin], 0, 0),
@@ -264,35 +267,35 @@ def scan_for_watermarks(
                                 "source": "OCR"
                             })
 
-            # Zapis i podgląd
-            if frame_detections:
+            # Rysowanie i logowanie
+            for det in frame_detections:
+                x1, y1, x2, y2 = det["bbox"]
+                color = (0, 255, 0) if det["source"] == "YOLO" else (0, 165, 255)
+                cv2.rectangle(frame_to_draw, (x1, y1), (x2, y2), color, 3)
+                cv2.putText(
+                    frame_to_draw,
+                    f"{det['type']} ({int(det['confidence'] * 100)}%)",
+                    (x1, max(0, y1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
+                )
+                
+                found_types.add(det['type'])
+                detections_count += 1
+                
+                # Zapis pliku klatki tylko gdy jest dowód
                 fname = f"frame_{frame_idx}_t_{now_sec:.2f}s.jpg"
                 save_path = os.path.join(out_dir, fname)
                 
-                for det in frame_detections:
-                    x1, y1, x2, y2 = det["bbox"]
-                    color = (0, 255, 0) if det["source"] == "YOLO" else (0, 165, 255)
-                    cv2.rectangle(frame_to_draw, (x1, y1), (x2, y2), color, 3)
-                    cv2.putText(
-                        frame_to_draw,
-                        f"{det['type']} ({int(det['confidence'] * 100)}%)",
-                        (x1, max(0, y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2,
-                    )
-                    
-                    found_types.add(det['type'])
-                    detections_count += 1
-                    
-                    csv_writer.writerow([
-                        os.path.basename(media_path),
-                        "Video" if is_video else "Image",
-                        frame_idx,
-                        f"{now_sec:.2f}",
-                        det['type'],
-                        f"{det['confidence']:.2f}",
-                        det['text'],
-                        save_path
-                    ])
+                csv_writer.writerow([
+                    os.path.basename(media_path),
+                    "Video" if is_video else "Image",
+                    frame_idx,
+                    f"{now_sec:.2f}",
+                    det['type'],
+                    f"{det['confidence']:.2f}",
+                    det['text'],
+                    save_path
+                ])
                 
                 try:
                     cv2.imwrite(save_path, frame_to_draw)
@@ -300,9 +303,13 @@ def scan_for_watermarks(
                 except Exception:
                     pass
 
-                # Wyślij do GUI
-                if preview_callback:
-                    preview_callback(frame_to_draw)
+            # Wyślij KAŻDĄ analizowaną klatkę do podglądu (nawet bez watermarku) by był efekt wideo na żywo
+            if preview_callback:
+                # Opcjonalnie można dodać tekst w rogu, że nic nie wykryto na tej klatce, by interfejs żył
+                if not frame_detections:
+                     cv2.putText(frame_to_draw, f"Brak detekcji (klatka {frame_idx})", (10, 30), 
+                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
+                preview_callback(frame_to_draw)
 
     cap.release()
 
