@@ -5,7 +5,7 @@ Detekcja znaków wodnych / napisów „generatora” w obrazach i wideo.
 Dostosowane do wytycznych:
 - Zapis CSV z detekcjami (Plik, Typ, Numer klatki, Timestamp, Typ watermarku, Confidence, Tekst, Ścieżka).
 - Konfiguracja progu pewności (confidence) oraz próbkowania (sample_rate).
-- PaddleOCR (szybszy) + EasyOCR (fallback).
+- Przekazywanie klatek do podglądu w GUI na żywo.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import csv
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable
 
 import cv2
 import numpy as np
@@ -22,7 +22,7 @@ import config
 
 # Lazy singletons
 _OCR_READER = None
-_OCR_ENGINE_TYPE = None  # "paddle" lub "easyocr"
+_OCR_ENGINE_TYPE = None
 _YOLO_MODEL = None
 
 
@@ -142,7 +142,8 @@ def scan_for_watermarks(
     check_stop=None, 
     progress_callback=None, 
     confidence: float = 0.6, 
-    sample_rate: int = 30
+    sample_rate: int = 30,
+    preview_callback: Optional[Callable[[np.ndarray], None]] = None
 ) -> Dict[str, Any]:
     
     is_video = os.path.splitext(media_path)[1].lower() in {".mp4", ".mov", ".avi", ".mkv", ".webm"}
@@ -170,10 +171,8 @@ def scan_for_watermarks(
     detections_count = 0
     found_types = set()
 
-    # Otwórz plik CSV do zapisu strumieniowego
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         csv_writer = csv.writer(csvfile)
-        # Nagłówki z pliku PDF
         csv_writer.writerow(["Plik", "Typ", "Numer klatki", "Timestamp", "Typ watermarku", "Confidence", "Tekst", "Ścieżka zapisu"])
 
         while True:
@@ -189,7 +188,6 @@ def scan_for_watermarks(
             if progress_callback and is_video and frame_idx % 10 == 0:
                 progress_callback(frame_idx, total_frames)
 
-            # Pomijanie klatek w wideo
             if is_video and frame_idx % sample_rate != 0 and frame_idx != 1:
                 continue
 
@@ -210,17 +208,17 @@ def scan_for_watermarks(
                     "source": "YOLO"
                 })
 
-            # 2) OCR (Smart Corners + CLAHE)
+            # 2) OCR
             reader = _get_reader()
             if reader is not None:
                 w_margin = int(w * 0.35)
                 h_margin = int(h * 0.25)
                 
                 smart_corners = [
-                    (frame[0:h_margin, 0:w_margin], 0, 0),                                # TL
-                    (frame[0:h_margin, w - w_margin:w], w - w_margin, 0),                 # TR
-                    (frame[h - h_margin:h, 0:w_margin], 0, h - h_margin),                 # BL
-                    (frame[h - h_margin:h, w - w_margin:w], w - w_margin, h - h_margin),  # BR
+                    (frame[0:h_margin, 0:w_margin], 0, 0),
+                    (frame[0:h_margin, w - w_margin:w], w - w_margin, 0),
+                    (frame[h - h_margin:h, 0:w_margin], 0, h - h_margin),
+                    (frame[h - h_margin:h, w - w_margin:w], w - w_margin, h - h_margin),
                 ]
 
                 for roi, x_off, y_off in smart_corners:
@@ -252,7 +250,7 @@ def scan_for_watermarks(
                                 matched_keyword = k
                                 break
                                 
-                        if matched_keyword != "UNKNOWN": # Zapisujemy tylko jeśli pasuje do słów kluczowych
+                        if matched_keyword != "UNKNOWN":
                             x1 = int(bbox[0][0]) + x_off
                             y1 = int(bbox[0][1]) + y_off
                             x2 = int(bbox[2][0]) + x_off
@@ -266,7 +264,7 @@ def scan_for_watermarks(
                                 "source": "OCR"
                             })
 
-            # Zapis klatki dowodowej i wiersza CSV jeśli coś wykryto
+            # Zapis i podgląd
             if frame_detections:
                 fname = f"frame_{frame_idx}_t_{now_sec:.2f}s.jpg"
                 save_path = os.path.join(out_dir, fname)
@@ -285,7 +283,6 @@ def scan_for_watermarks(
                     found_types.add(det['type'])
                     detections_count += 1
                     
-                    # Zapis do CSV
                     csv_writer.writerow([
                         os.path.basename(media_path),
                         "Video" if is_video else "Image",
@@ -302,6 +299,10 @@ def scan_for_watermarks(
                     saved_paths.append(save_path)
                 except Exception:
                     pass
+
+                # Wyślij do GUI
+                if preview_callback:
+                    preview_callback(frame_to_draw)
 
     cap.release()
 
