@@ -1,7 +1,7 @@
 """
 ocr_detector.py
 
-Detekcja znaków wodnych / napisów „generatora” w obrazach i wideo.
+Detekcja znaków wodnych / napisów „generatora" w obrazach i wideo.
 Dostosowane do wytycznych:
 - Zapis CSV z detekcjami.
 - Konfiguracja progu pewności (confidence) oraz próbkowania (sample_rate).
@@ -246,9 +246,7 @@ def _get_advanced_filters(frame_bgr: np.ndarray) -> List[Tuple[str, np.ndarray]]
         filters.append(("AGGR-EDGE", edge_enhanced))
 
         # 6. EXTREME WHITE BACKGROUND FIX (Gamma + Invert CLAHE)
-        # Przy bardzo jasnym tle (jak słońce, chmury, śnieg) obniżamy jasność przez krzywą gammy (przyciemniamy),
-        # żeby biały znak wodny zaczął odstawać, a następnie odwracamy kolory by napis stał się czarny i przepuszczamy przez CLAHE.
-        gamma = 0.4 # Silne przyciemnienie
+        gamma = 0.4
         inv_gamma = 1.0 / gamma
         table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
         darkened = cv2.LUT(frame_bgr, table)
@@ -256,8 +254,7 @@ def _get_advanced_filters(frame_bgr: np.ndarray) -> List[Tuple[str, np.ndarray]]
         dark_inv_clahe = _preprocess_for_ocr(dark_inv)
         filters.append(("AGGR-EXTREME-WHITE", dark_inv_clahe))
 
-        # 7. Localized Background Subtraction (Tło lokalne odjęte)
-        # Wykorzystywane aby usunąć gradient szarości nieba i zostawić twarde znaki
+        # 7. Localized Background Subtraction
         bg = cv2.medianBlur(gray, 51) 
         diff = cv2.absdiff(gray, bg)
         diff_norm = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX)
@@ -374,9 +371,12 @@ def scan_for_watermarks(
     if not cap.isOpened():
         return {"status": "ERROR", "error": "Nie można otworzyć pliku."}
 
+    # FIX: dodano GEN3/GEN4/GEN5 i warianty Runway Gen 4/5
     default_keywords = [
-        "SORA", "OPENAI", "GENERATED", "AI VIDEO", "MADE WITH", "AI GENERATED", 
-        "RUNWAY", "PIKA", "LUMA", "GEN-2", "TIKTOK", "KWAI", "CAPCUT", "STABLE VIDEO",
+        "SORA", "OPENAI", "GENERATED", "AI VIDEO", "MADE WITH", "AI GENERATED",
+        "RUNWAY", "PIKA", "LUMA", "GEN-2", "GEN-3", "GEN-4", "GEN-5",
+        "GEN3", "GEN4", "GEN5", "GEN 3", "GEN 4", "GEN 5",
+        "TIKTOK", "KWAI", "CAPCUT", "STABLE VIDEO",
         "KLING", "VEED", "INVIDEO", "KAPWING", "SYNTHID", "MINIMAX", "HAIPER", "DREAMLUX"
     ]
     keywords = [str(k).upper() for k in getattr(config, "WATERMARK_KEYWORDS", default_keywords)]
@@ -421,7 +421,6 @@ def scan_for_watermarks(
 
             now_sec = frame_idx / float(fps) if is_video else 0.0
             
-            # W fazie 1 dodajemy szybki filtr gamma do białych teł by zwiększyć szansę już na wejściu bez czekania na AGGR
             gamma = 0.5
             inv_gamma = 1.0 / gamma
             table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
@@ -478,15 +477,10 @@ def scan_for_watermarks(
 
         # ==========================================
         # FAZA 2: Szczegółowa Analiza (Zaawansowana)
-        # Dla obrazków robimy też Faze 2 automatycznie, jeśli 'detailed_scan' i brak detekcji,
-        # dla filmów tylko wtedy gdy detections_count > 0.
+        # FIX: przy detailed_scan=True zawsze skanujemy wszystkie klatki bez detekcji,
+        # niezależnie od tego czy Faza 1 coś znalazła.
         # ==========================================
-        run_aggr = False
-        if detailed_scan and missed_frames and not (check_stop and check_stop()):
-            if not is_video:
-                run_aggr = True  # Zawsze dociskamy zdjęcia jak nic nie znaleziono
-            elif detections_count > 0:
-                run_aggr = True  # Wideo dociskamy tylko jak jest dowód na innej klatce
+        run_aggr = detailed_scan and missed_frames and not (check_stop and check_stop())
 
         if run_aggr:
             for i, m_idx in enumerate(missed_frames):
@@ -510,7 +504,6 @@ def scan_for_watermarks(
                 aggr_versions.append(("AGGR-BW", cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)))
                 aggr_versions.append(("AGGR-ORIG", frame))
                 
-                # Dodatkowa super rozdzielczość x2.0 pod kątem zblendowanych napisów Sora na niebie/chmurach
                 frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions, scale_factor=2.0)
                 
                 if frame_detections:
