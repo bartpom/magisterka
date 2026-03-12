@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # rename_sdfvd_fake.sh
 # Przemianowuje pliki fake z datasetu SDFVD dodajac sufiks _c2pa przed rozszerzeniem.
-# Uruchom z dowolnego katalogu.
 
 FAKE_DIR="/mnt/c/Users/bart1/OneDrive/Desktop/magisterka/nagrania/SDFVD Small-scale Deepfake Forgery Video Dataset/SDFVD/SDFVD/videos_fake"
 
