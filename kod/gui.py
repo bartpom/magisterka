@@ -261,25 +261,33 @@ def _fmt_eta(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def _get_frame_count(path: str) -> int:
+    """Bezpiecznie pobiera liczbę klatek - zamyka cap natychmiast."""
+    cap = cv2.VideoCapture(os.path.abspath(path))
+    count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if cap.isOpened() else 0
+    cap.release()
+    return count
+
+
 # ============================ Worker ============================
 
 class WatermarkWorker(QtCore.QThread):
-    progress  = pyqtSignal(int, int)       # curr, total (klatki bieżącego pliku)
-    eta_update = pyqtSignal(str)           # tekst ETA
-    file_started  = pyqtSignal(int, str, int)
-    file_finished = pyqtSignal(int, dict)
-    log_line      = pyqtSignal(str)
+    progress       = pyqtSignal(int, int)
+    eta_update     = pyqtSignal(str)
+    file_started   = pyqtSignal(int, str, int)
+    file_finished  = pyqtSignal(int, dict)
+    log_line       = pyqtSignal(str)
     frame_detected = pyqtSignal(np.ndarray, list)
-    all_done      = pyqtSignal()
+    all_done       = pyqtSignal()
 
     def __init__(self, files, confidence, sample_rate, output_dir, detailed_scan, parent=None):
         super().__init__(parent)
-        self._files        = files
-        self._confidence   = confidence
-        self._sample_rate  = sample_rate
-        self._output_dir   = output_dir
+        self._files         = files
+        self._confidence    = confidence
+        self._sample_rate   = max(1, int(sample_rate)) if sample_rate else 1
+        self._output_dir    = output_dir
         self._detailed_scan = detailed_scan
-        self._stop         = False
+        self._stop          = False
 
     def stop(self):
         self._stop = True
@@ -290,11 +298,19 @@ class WatermarkWorker(QtCore.QThread):
             self.all_done.emit()
             return
 
+        # FIX: reset singletona OCR aby wymusic inicjalizacje w tym watku (QThread)
+        ocr_detector.reset_reader()
+
         original_base = getattr(config, "REPORTS_BASE_DIR", "reports")
         if self._output_dir:
             setattr(config, "REPORTS_BASE_DIR", self._output_dir)
 
-        # --- ETA: zbieramy próbki czasu na klatkę ---
+        # FIX: pre-oblicz liczby klatek dla wszystkich plikow PRZED petla
+        # (unikamy otwierania VideoCapture wewnatrz progress callback)
+        all_frame_counts = [
+            _get_frame_count(p) for p in self._files
+        ]
+
         frame_times: list[float] = []
 
         try:
@@ -303,11 +319,7 @@ class WatermarkWorker(QtCore.QThread):
                     break
 
                 fname = os.path.basename(path)
-                total_frames = 0
-                cap = cv2.VideoCapture(os.path.abspath(path))
-                if cap.isOpened():
-                    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                    cap.release()
+                total_frames = all_frame_counts[idx]
 
                 self.file_started.emit(idx, fname, total_frames)
                 self.log_line.emit(
@@ -316,27 +328,33 @@ class WatermarkWorker(QtCore.QThread):
                     f"Detailed: {self._detailed_scan})"
                 )
 
-                sampled = max(1, total_frames // max(1, self._sample_rate)) if total_frames > 0 else 1
-                frames_done = [0]  # mutowalna referencja dla closure
+                sampled = max(1, total_frames // self._sample_rate) if total_frames > 0 else 1
+                frames_done = [0]
                 file_start_t = time.monotonic()
 
-                def cb(curr, tot, _idx=idx, _sampled=sampled):
-                    frames_done[0] += 1
-                    elapsed = time.monotonic() - file_start_t
-                    if frames_done[0] > 0:
-                        avg = elapsed / frames_done[0]
-                        frame_times.append(avg)
-                        if len(frame_times) > 20:
-                            frame_times.pop(0)
-                        avg_global = sum(frame_times) / len(frame_times)
-                        remaining_this = max(0, _sampled - frames_done[0]) * avg_global
-                        # klatki pozostałych plików (szacunek)
-                        remaining_files = sum(
-                            max(1, int(cv2.VideoCapture(os.path.abspath(p)).get(cv2.CAP_PROP_FRAME_COUNT))
-                                // max(1, self._sample_rate))
-                            for p in self._files[_idx + 1:]
-                        ) if _idx + 1 < len(self._files) else 0
-                        eta_sec = remaining_this + remaining_files * avg_global
+                # FIX: pre-oblicz remaining_frames_after bez VideoCapture w closure
+                remaining_frames_after = sum(
+                    max(1, all_frame_counts[j] // self._sample_rate)
+                    for j in range(idx + 1, len(self._files))
+                    if all_frame_counts[j] > 0
+                )
+
+                def cb(curr, tot,
+                       _sampled=sampled,
+                       _remaining_after=remaining_frames_after,
+                       _ft=frame_times,
+                       _fst=file_start_t,
+                       _fd=frames_done):
+                    _fd[0] += 1
+                    elapsed = time.monotonic() - _fst
+                    if _fd[0] > 0:
+                        avg = elapsed / _fd[0]
+                        _ft.append(avg)
+                        if len(_ft) > 20:
+                            _ft.pop(0)
+                        avg_global = sum(_ft) / len(_ft)
+                        remaining_this = max(0, _sampled - _fd[0]) * avg_global
+                        eta_sec = remaining_this + _remaining_after * avg_global
                         self.eta_update.emit(f"ETA: {_fmt_eta(eta_sec)}")
                     self.progress.emit(int(curr), int(tot))
 
@@ -346,7 +364,7 @@ class WatermarkWorker(QtCore.QThread):
                     elif len(args) >= 2:
                         self.frame_detected.emit(args[0], args[1])
 
-                # --- C2PA (przed OCR — szybkie) ---
+                # C2PA
                 c2pa_result: dict = {}
                 if c2pa_detector is not None:
                     try:
@@ -365,9 +383,9 @@ class WatermarkWorker(QtCore.QThread):
                         preview_callback=preview_cb
                     )
                     details = res if isinstance(res, dict) else {}
-                    details["full_path"]   = os.path.abspath(path)
+                    details["full_path"]    = os.path.abspath(path)
                     details["total_frames"] = total_frames
-                    details["c2pa"]        = c2pa_result
+                    details["c2pa"]         = c2pa_result
                 except Exception as e:
                     self.log_line.emit(f"[BŁĄD] {fname}: {e}")
                     details = {
@@ -502,7 +520,6 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Vertical)
         left_layout.addWidget(splitter, 1)
 
-        # Tabela — 6 kolumn
         self.table_results = QTableWidget()
         self.table_results.setColumnCount(6)
         self.table_results.setHorizontalHeaderLabels([
@@ -518,10 +535,7 @@ class MainWindow(QMainWindow):
         self.table_results.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_results.setAlternatingRowColors(True)
-        self.table_results.setToolTip(
-            "Dwuklik na wierszu — otworzy folder z raportem dla tego pliku."
-        )
-        # ←←← DOUBLE-CLICK → otwiera folder raportu
+        self.table_results.setToolTip("Dwuklik na wierszu — otworzy folder z raportem dla tego pliku.")
         self.table_results.cellDoubleClicked.connect(self._on_row_double_clicked)
         splitter.addWidget(self.table_results)
 
@@ -530,7 +544,6 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.logView)
         splitter.setSizes([350, 250])
 
-        # Pasek postępu + ETA
         bottom = QHBoxLayout()
         bottom.setSpacing(6)
         left_layout.addLayout(bottom)
@@ -649,11 +662,10 @@ class MainWindow(QMainWindow):
         else:
             super().dropEvent(event)
 
-    # -------------------- Double-click → folder --------------------
+    # -------------------- Double-click --------------------
 
     @pyqtSlot(int, int)
     def _on_row_double_clicked(self, row: int, _col: int) -> None:
-        """Dwuklik na wierszu → otwórz folder raportu tego pliku."""
         folder = self.report_paths.get(row)
         if not folder or not os.path.isdir(folder):
             self.append_log("> Folder raportu nie jest jeszcze dostępny dla tego pliku.")
