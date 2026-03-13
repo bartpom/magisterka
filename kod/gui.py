@@ -36,7 +36,6 @@ SUPPORTED_EXTS = {
     ".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff",
 }
 
-# Indeksy kolumn
 COL_FILE   = 0
 COL_TYPE   = 1
 COL_STATUS = 2
@@ -44,7 +43,7 @@ COL_PCT    = 3
 COL_C2PA   = 4
 COL_CSV    = 5
 
-# ============================ QSS Themes ============================
+# ======================== QSS Themes ========================
 
 _DARK_QSS = """
 QMainWindow, QWidget {
@@ -166,7 +165,7 @@ QLabel#preview_label, QLabel#zoom_label {
 }
 """
 
-# ============================ Toggle Switch ============================
+# ======================== Toggle Switch ========================
 
 class ToggleSwitch(QtWidgets.QAbstractButton):
     def __init__(self, label: str = "", parent=None):
@@ -200,7 +199,7 @@ class ToggleSwitch(QtWidgets.QAbstractButton):
         p.end()
 
 
-# ============================ Drop Overlay ============================
+# ======================== Drop Overlay ========================
 
 class DropOverlay(QWidget):
     def __init__(self, parent: QWidget):
@@ -233,7 +232,7 @@ class DropOverlay(QWidget):
         p.end()
 
 
-# ============================ helpers ============================
+# ======================== helpers ========================
 
 def is_supported_file(path: str) -> bool:
     return os.path.splitext(path)[1].lower() in SUPPORTED_EXTS
@@ -268,7 +267,114 @@ def _get_frame_count(path: str) -> int:
     return count
 
 
-# ============================ Worker ============================
+def _safe_crop_for_zoom(
+    frame_bgr: np.ndarray,
+    x1: int, y1: int, x2: int, y2: int,
+    padding: int = 40
+) -> np.ndarray:
+    """
+    Wycina fragment klatki wokol bbox z paddingiem.
+    Gwarantuje ze:
+      - caly bbox (z ramka) jest widoczny
+      - kadr nie wychodzi poza obraz
+      - crop ma minimalne wymiary zapobiegajace bialym/czarnym paskam
+    Zwraca wyciety fragment bez letterboxingu.
+    """
+    h, w = frame_bgr.shape[:2]
+
+    # Bbox moze wychodzic poza obraz (np. znak przy samej krawedzi) – najpierw go przytnij
+    bx1 = max(0, x1)
+    by1 = max(0, y1)
+    bx2 = min(w - 1, x2)
+    by2 = min(h - 1, y2)
+
+    # Dodaj padding i sprawdz czy nie wychodzi poza kadr
+    cx1 = max(0, bx1 - padding)
+    cy1 = max(0, by1 - padding)
+    cx2 = min(w, bx2 + padding)
+    cy2 = min(h, by2 + padding)
+
+    # Jesli bbox jest przy krawedzi, przesuniemy kadr w przeciwna strone
+    # tak zeby bbox byl w pelni widoczny z paddingiem
+    crop_w = cx2 - cx1
+    crop_h = cy2 - cy1
+
+    # Jesli bbox jest blisko prawej/dolnej krawedzi i brakuje miejsca na padding –
+    # przesuniemy lewy/gorny bok w lewo/gore (o ile to mozliwe)
+    if bx2 + padding > w and cx1 > 0:
+        shift = min(cx1, (bx2 + padding) - w)
+        cx1 -= shift
+        cx2 = min(w, cx2)  # cx2 i tak jest == w
+    if by2 + padding > h and cy1 > 0:
+        shift = min(cy1, (by2 + padding) - h)
+        cy1 -= shift
+        cy2 = min(h, cy2)
+
+    # Analogicznie dla lewej/gornej krawedzi
+    if bx1 - padding < 0 and cx2 < w:
+        shift = min(w - cx2, padding - bx1)
+        cx2 += shift
+    if by1 - padding < 0 and cy2 < h:
+        shift = min(h - cy2, padding - by1)
+        cy2 += shift
+
+    cx1, cy1, cx2, cy2 = max(0, cx1), max(0, cy1), min(w, cx2), min(h, cy2)
+
+    if cx2 <= cx1 or cy2 <= cy1:
+        return frame_bgr  # fallback: zwroc cala klatke
+
+    return frame_bgr[cy1:cy2, cx1:cx2]
+
+
+def _fit_crop_to_label(
+    crop_bgr: np.ndarray,
+    label_w: int,
+    label_h: int
+) -> QPixmap:
+    """
+    Skaluje crop do rozmiaru labela BEZ czarnych pasków:
+    - liczy docelowe wymiary zachowujac aspect ratio
+    - zwraca QPixmap o rozmiarze dokladnie (label_w x label_h)
+      z obrazem wycentrowanym i tlem dopasowanym do koloru krawedzi cropa
+      (zamiast czerni)
+    Dzieki temu widget zawsze jest wypelniony.
+    """
+    ch, cw = crop_bgr.shape[:2]
+    if cw == 0 or ch == 0 or label_w == 0 or label_h == 0:
+        return QPixmap()
+
+    # Oblicz skale zachowujac aspect ratio (KeepAspectRatio)
+    scale = min(label_w / cw, label_h / ch)
+    new_w = int(cw * scale)
+    new_h = int(ch * scale)
+
+    resized = cv2.resize(crop_bgr, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+
+    # Stwórz tlo wypelnione srednim kolorem krawedzi cropa (zamiast czarnego)
+    # Uzywamy rozmytej wersji jako tla – efekt "rozlania" obrazu bez czarnych pasow
+    border_color = np.median(
+        np.concatenate([
+            crop_bgr[0, :],          # gorna krawedz
+            crop_bgr[-1, :],         # dolna krawedz
+            crop_bgr[:, 0],          # lewa krawedz
+            crop_bgr[:, -1],         # prawa krawedz
+        ], axis=0),
+        axis=0
+    ).astype(np.uint8)
+
+    canvas = np.full((label_h, label_w, 3), border_color, dtype=np.uint8)
+
+    # Wklejenie wycentrowane
+    off_x = (label_w - new_w) // 2
+    off_y = (label_h - new_h) // 2
+    canvas[off_y:off_y + new_h, off_x:off_x + new_w] = resized
+
+    canvas_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
+    qt_img = QImage(canvas_rgb.data, label_w, label_h, 3 * label_w, QImage.Format.Format_RGB888)
+    return QPixmap.fromImage(qt_img)
+
+
+# ======================== Worker ========================
 
 class WatermarkWorker(QtCore.QThread):
     progress       = pyqtSignal(int, int)
@@ -297,8 +403,6 @@ class WatermarkWorker(QtCore.QThread):
             self.all_done.emit()
             return
 
-        # FIX: NIE wywolujemy reset_reader() - niszczyloby to reader zaladowany w głównym watku.
-        # Zamiast tego warmup_reader() sprawdza czy juz zaladowany i loguje bledy do GUI.
         engine, err = ocr_detector.warmup_reader(log_fn=self.log_line.emit)
         if err or engine is None:
             self.log_line.emit(f"[BŁĄD KRYTYCZNY] OCR nie mógł się zainicjalizować: {err}")
@@ -312,10 +416,7 @@ class WatermarkWorker(QtCore.QThread):
         if self._output_dir:
             setattr(config, "REPORTS_BASE_DIR", self._output_dir)
 
-        all_frame_counts = [
-            _get_frame_count(p) for p in self._files
-        ]
-
+        all_frame_counts = [_get_frame_count(p) for p in self._files]
         frame_times: list[float] = []
 
         try:
@@ -407,7 +508,7 @@ class WatermarkWorker(QtCore.QThread):
         self.all_done.emit()
 
 
-# ============================ GUI ============================
+# ======================== GUI ========================
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -619,17 +720,14 @@ class MainWindow(QMainWindow):
         self.status = self.statusBar()
         self._apply_theme(True)
 
-        # FIX: Warm-up OCR w tle przy starcie GUI zeby nie inicjalizowac w QThread
         if ocr_detector is not None:
             QtCore.QTimer.singleShot(500, self._warmup_ocr)
 
     def _warmup_ocr(self):
-        """Inicjalizuje OCR reader w głównym wątku przy starcie aplikacji."""
         import threading
         def _do():
             engine, err = ocr_detector.warmup_reader()
             if err:
-                # Bezpieczne logowanie z powrotem do głównego wątku
                 QtCore.QMetaObject.invokeMethod(
                     self.logView, "append",
                     Qt.ConnectionType.QueuedConnection,
@@ -643,15 +741,11 @@ class MainWindow(QMainWindow):
                 )
         threading.Thread(target=_do, daemon=True).start()
 
-    # -------------------- Resize --------------------
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         cw = self.centralWidget()
         if cw and self._drop_overlay:
             self._drop_overlay.setGeometry(cw.rect())
-
-    # -------------------- Theme --------------------
 
     def _apply_theme(self, dark: bool) -> None:
         app = QApplication.instance()
@@ -659,8 +753,6 @@ class MainWindow(QMainWindow):
             return
         app.setStyle("Fusion")  # type: ignore
         app.setStyleSheet(_DARK_QSS if dark else _LIGHT_QSS)  # type: ignore
-
-    # -------------------- Drag & Drop --------------------
 
     def dragEnterEvent(self, event: QtGui.QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -689,8 +781,6 @@ class MainWindow(QMainWindow):
         else:
             super().dropEvent(event)
 
-    # -------------------- Double-click --------------------
-
     @pyqtSlot(int, int)
     def _on_row_double_clicked(self, row: int, _col: int) -> None:
         folder = self.report_paths.get(row)
@@ -698,8 +788,6 @@ class MainWindow(QMainWindow):
             self.append_log("> Folder raportu nie jest jeszcze dostępny dla tego pliku.")
             return
         self._open_path(folder)
-
-    # -------------------- Helpers --------------------
 
     def _open_path(self, path: str) -> None:
         try:
@@ -760,36 +848,34 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(np.ndarray, list)
     def set_preview_image(self, frame_bgr: np.ndarray, detections: list) -> None:
-        h, w, ch = frame_bgr.shape
+        h, w = frame_bgr.shape[:2]
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        qt_img = QImage(frame_rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+        qt_img = QImage(frame_rgb.data, w, h, 3 * w, QImage.Format.Format_RGB888)
         pixmap = QPixmap.fromImage(qt_img)
         self.lbl_preview.setPixmap(
-            pixmap.scaled(self.lbl_preview.size(),
-                          Qt.AspectRatioMode.KeepAspectRatio,
-                          Qt.TransformationMode.SmoothTransformation)
+            pixmap.scaled(
+                self.lbl_preview.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
         )
+
         if detections:
             det = detections[0]
             x1, y1, x2, y2 = det.get("bbox", (0, 0, 10, 10))
-            padding = 30
-            crop = frame_bgr[max(0, y1-padding):min(h, y2+padding),
-                             max(0, x1-padding):min(w, x2+padding)]
+
+            # Wycinek z bezpiecznym paddingiem i przesuniecia gdy sign watermark jest przy krawedzi
+            crop = _safe_crop_for_zoom(frame_bgr, x1, y1, x2, y2, padding=40)
+
             if crop.size > 0:
-                ch_c, cw_c, c_c = crop.shape
-                crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-                crop_qt = QImage(crop_rgb.data, cw_c, ch_c, c_c * cw_c, QImage.Format.Format_RGB888)
-                self.lbl_zoom.setPixmap(
-                    QPixmap.fromImage(crop_qt).scaled(
-                        self.lbl_zoom.size(),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                )
+                lw = max(1, self.lbl_zoom.width())
+                lh = max(1, self.lbl_zoom.height())
+                # Skalowanie bez czarnych pasków – tło dopasowane do koloru krawędzi
+                zoom_pixmap = _fit_crop_to_label(crop, lw, lh)
+                if not zoom_pixmap.isNull():
+                    self.lbl_zoom.setPixmap(zoom_pixmap)
         else:
             self.lbl_zoom.setText("Brak detekcji")
-
-    # -------------------- Actions --------------------
 
     def pick_output_dir(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Wybierz folder docelowy dla raportów")
@@ -865,8 +951,6 @@ class MainWindow(QMainWindow):
             return
         self._open_path(self.current_run_dir)
 
-    # -------------------- Slots --------------------
-
     @pyqtSlot(int, int)
     def on_progress(self, curr: int, tot: int) -> None:
         if tot > 0:
@@ -895,7 +979,6 @@ class MainWindow(QMainWindow):
         total_frames = details.get("total_frames", 0) or 0
         sampled = max(1, total_frames // max(1, self.spin_sample.value())) if total_frames > 0 else 1
 
-        # Status AI
         if count > 0:
             types = ", ".join(details.get("watermark_types", []))
             si = QTableWidgetItem(f"🔴 AI DETECTED\n{types}")
@@ -906,7 +989,6 @@ class MainWindow(QMainWindow):
         si.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         self.table_results.setItem(idx, COL_STATUS, si)
 
-        # % AI
         if total_frames > 0 and count > 0:
             ai_pct = min(100.0, count / sampled * 100)
             pi = QTableWidgetItem(f"🔴 {ai_pct:.0f}% AI  |  ✅ {100-ai_pct:.0f}% CLEAR")
@@ -919,7 +1001,6 @@ class MainWindow(QMainWindow):
         pi.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         self.table_results.setItem(idx, COL_PCT, pi)
 
-        # C2PA
         c2pa = details.get("c2pa", {})
         if isinstance(c2pa, dict) and c2pa:
             if "error" in c2pa:
@@ -950,7 +1031,6 @@ class MainWindow(QMainWindow):
         ci.setToolTip(c2pa_tip)
         self.table_results.setItem(idx, COL_C2PA, ci)
 
-        # Raport CSV
         report_file = details.get("csv_path", folder if folder else "Brak")
         self.table_results.setItem(idx, COL_CSV, QTableWidgetItem(str(report_file)))
 
@@ -969,7 +1049,7 @@ class MainWindow(QMainWindow):
         self.worker = None
 
 
-# ============================ entry point ============================
+# ======================== entry point ========================
 
 def run() -> None:
     app = QApplication(sys.argv)
