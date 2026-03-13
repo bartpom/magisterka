@@ -36,7 +36,7 @@ CORNER_RATIO = 0.15
 CORNER_SCALE = 5.0
 
 _LABEL_FONT      = cv2.FONT_HERSHEY_SIMPLEX
-_LABEL_SCALE     = 0.55   # nieznacznie mniejszy font
+_LABEL_SCALE     = 0.55
 _LABEL_THICKNESS = 1
 _LABEL_PAD       = 3
 
@@ -71,16 +71,23 @@ class TextTracker:
 
 def _draw_label(img: np.ndarray, text: str, anchor_x: int, anchor_y: int,
                 color=(0, 255, 0), used_rects: list = None) -> tuple:
+    """
+    Rysuje etykiete PONIZEJ punktu anchor (anchor_y = dolna krawedz bbox).
+    Dzieki temu napis nie zasłania zielonej ramki detekcji.
+    """
     h_img, w_img = img.shape[:2]
     (tw, th), baseline = cv2.getTextSize(text, _LABEL_FONT, _LABEL_SCALE, _LABEL_THICKNESS)
     box_w = min(tw + 2 * _LABEL_PAD, w_img)
     box_h = th + baseline + 2 * _LABEL_PAD
 
     tx = max(0, min(anchor_x, w_img - box_w))
-    ty = anchor_y - _LABEL_PAD
-    if ty - th - _LABEL_PAD < 0:
-        ty = anchor_y + box_h
-    ty = max(box_h, min(ty, h_img - _LABEL_PAD))
+
+    # Umieszczamy etykiete pod bbox; jesli nie ma miejsca na dole — przesuwamy nad bbox
+    ty_below = anchor_y + _LABEL_PAD + th  # dolna krawedz tekstu przy rysowaniu pod
+    if anchor_y + box_h > h_img:
+        # Brak miejsca pod — rysuj nad
+        ty_below = anchor_y - _LABEL_PAD
+    ty = max(th + _LABEL_PAD, min(ty_below, h_img - baseline - _LABEL_PAD))
 
     if used_rects is not None:
         for _ in range(40):
@@ -480,13 +487,8 @@ def _perform_scan(
 def _annotate_frame(frame: np.ndarray, detections: List[dict], tracker: 'TextTracker',
                     frame_idx: int, aggr: bool = False) -> Dict[str, str]:
     """
-    Rysuje ramki i minimalne etykiety na klatce.
-    Format etykiety: "TYP XX%" – tylko nazwa wykrytego watermarku i pewnosc OCR.
-    Status ruchu (NOWY/STATYCZNY/RUCHOMY) jest obliczany i zwracany jako slownik
-    {type_id: status} do zapisu w CSV, ale NIE trafia na obraz.
-
-    Returns:
-        slownik {det['type']: motion_status} dla kazdej detekcji
+    Rysuje ramki i etykiety na klatce.
+    Etykieta jest rysowana POD bbox (anchor_y=y2), dzieki czemu nie zasłania zielonej ramki.
     """
     used_rects: List[Tuple] = []
     motion_map: Dict[str, str] = {}
@@ -494,16 +496,15 @@ def _annotate_frame(frame: np.ndarray, detections: List[dict], tracker: 'TextTra
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
 
-        # Oblicz status ruchu (do CSV), ale nie wyswietlaj na obrazie
         motion = tracker.update(frame_idx, det['type'], det['bbox'])
         motion_map[det['type']] = motion
 
         conf_pct = int(det['confidence'] * 100)
-        # Minimalna etykieta: "RUNWAY 85%" lub "RUNWAY 85%*" przy trybie aggr
         label = f"{det['type']} {conf_pct}%" + ("*" if aggr else "")
 
+        # Najpierw ramka, potem etykieta POD nia (anchor_y = y2)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        _draw_label(frame, label, anchor_x=x1, anchor_y=y1,
+        _draw_label(frame, label, anchor_x=x1, anchor_y=y2,
                     color=(0, 255, 0), used_rects=used_rects)
 
     return motion_map
@@ -676,7 +677,6 @@ def scan_for_watermarks(
                 missed_frames.append(frame_idx)
 
             frame_to_draw = frame.copy()
-            # _annotate_frame zwraca motion_map do CSV
             motion_map = _annotate_frame(frame_to_draw, frame_detections, tracker, frame_idx, aggr=False)
 
             for det in frame_detections:
@@ -688,7 +688,7 @@ def scan_for_watermarks(
                     os.path.basename(media_path), "Video" if is_video else "Image",
                     frame_idx, f"{now_sec:.2f}", det['type'],
                     f"{det['confidence']:.2f}", det['text'],
-                    motion_map.get(det['type'], ""),   # <-- ruch tylko w CSV
+                    motion_map.get(det['type'], ""),
                     det.get('source', ''), save_path
                 ])
                 try:
