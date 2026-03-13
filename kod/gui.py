@@ -272,10 +272,6 @@ def _safe_crop_for_zoom(
     x1: int, y1: int, x2: int, y2: int,
     padding: int = 40
 ) -> np.ndarray:
-    """
-    Wycina fragment klatki wokol bbox z paddingiem.
-    Przesuwa kadr gdy bbox jest przy krawedzi, zeby cala ramka byla widoczna.
-    """
     h, w = frame_bgr.shape[:2]
 
     bx1 = max(0, x1)
@@ -313,35 +309,63 @@ def _safe_crop_for_zoom(
 
 
 def _fill_zoom_label(crop_bgr: np.ndarray, label_w: int, label_h: int) -> QPixmap:
-    """
-    Skaluje crop tak, zeby WYPELNIL caly widget (KeepAspectRatioByExpanding):
-    - skaluje do rozmiaru, w ktorym obraz pokrywa caly label (zadnych paskow)
-    - nadmiar jest przycinany od centrum (center crop)
-    - wynik ma dokladnie (label_w x label_h) pikseli
-    """
     ch, cw = crop_bgr.shape[:2]
     if cw == 0 or ch == 0 or label_w == 0 or label_h == 0:
         return QPixmap()
 
-    # Skala ExpandByExpanding: wybierz wieksza ze skal tak, zeby obraz pokryl caly label
     scale = max(label_w / cw, label_h / ch)
     new_w = int(cw * scale)
     new_h = int(ch * scale)
 
     resized = cv2.resize(crop_bgr, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
 
-    # Center crop do dokladnie (label_w x label_h)
     off_x = (new_w - label_w) // 2
     off_y = (new_h - label_h) // 2
     cropped = resized[off_y:off_y + label_h, off_x:off_x + label_w]
 
-    # Upewnij sie ze wymiary sa dokladnie takie jak label (moze byc 1px roznica przy zaokraglaniu)
     if cropped.shape[0] != label_h or cropped.shape[1] != label_w:
         cropped = cv2.resize(cropped, (label_w, label_h), interpolation=cv2.INTER_LINEAR)
 
     cropped_rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
     qt_img = QImage(cropped_rgb.data, label_w, label_h, 3 * label_w, QImage.Format.Format_RGB888)
     return QPixmap.fromImage(qt_img)
+
+
+# ======================== AspectRatioWidget (16:9 container) ========================
+
+class AspectRatioWidget(QWidget):
+    """
+    Widget opakowujacy label podgladu tak, zeby zawsze zachowywal proporcje 16:9.
+    Resizuje wewnetrzny label do max mozliwego rozmiaru 16:9 wewnatrz dostepnego miejsca.
+    """
+    def __init__(self, inner: QLabel, aspect_w: int = 16, aspect_h: int = 9, parent=None):
+        super().__init__(parent)
+        self._inner = inner
+        self._aw = aspect_w
+        self._ah = aspect_h
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(inner)
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding
+        )
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        avail_w = self.width()
+        avail_h = self.height()
+        # Max rozmiar zachowujacy 16:9
+        target_w = avail_w
+        target_h = avail_w * self._ah // self._aw
+        if target_h > avail_h:
+            target_h = avail_h
+            target_w = avail_h * self._aw // self._ah
+        # Wycentruj
+        off_x = (avail_w - target_w) // 2
+        off_y = (avail_h - target_h) // 2
+        self._inner.setGeometry(off_x, off_y, target_w, target_h)
 
 
 # ======================== Worker ========================
@@ -357,7 +381,8 @@ class WatermarkWorker(QtCore.QThread):
 
     def __init__(self, files, confidence, sample_rate, output_dir, detailed_scan, parent=None):
         super().__init__(parent)
-        self._files         = files
+        # Kopia listy plikow w momencie startu – bezpieczna przed modyfikacja przez GUI
+        self._files         = list(files)
         self._confidence    = confidence
         self._sample_rate   = max(1, int(sample_rate)) if sample_rate else 1
         self._output_dir    = output_dir
@@ -386,6 +411,7 @@ class WatermarkWorker(QtCore.QThread):
         if self._output_dir:
             setattr(config, "REPORTS_BASE_DIR", self._output_dir)
 
+        # Oblicz frame counts dla zamrozonej kopii listy
         all_frame_counts = [_get_frame_count(p) for p in self._files]
         frame_times: list[float] = []
 
@@ -648,22 +674,23 @@ class MainWindow(QMainWindow):
         # ---- RIGHT PANEL ----
         right_panel = QSplitter(Qt.Orientation.Vertical)
 
+        # -- Podglad klatki (16:9) --
         preview_container = QWidget()
         preview_lay = QVBoxLayout(preview_container)
         preview_lay.setContentsMargins(0, 0, 0, 0)
         lbl_title = QLabel("<b>Klatka z kamery:</b>")
         lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_lay.addWidget(lbl_title)
+
         self.lbl_preview = QLabel("Brak podglądu")
         self.lbl_preview.setObjectName("preview_label")
         self.lbl_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_preview.setMinimumSize(400, 300)
-        self.lbl_preview.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding
-        )
-        preview_lay.addWidget(self.lbl_preview, 1)
+        # Opakowanie 16:9
+        self._preview_ar = AspectRatioWidget(self.lbl_preview, 16, 9)
+        preview_lay.addWidget(self._preview_ar, 1)
         right_panel.addWidget(preview_container)
 
+        # -- Zoom detekcji --
         zoom_container = QWidget()
         zoom_lay = QVBoxLayout(zoom_container)
         zoom_lay.setContentsMargins(0, 10, 0, 0)
@@ -680,7 +707,7 @@ class MainWindow(QMainWindow):
         zoom_lay.addWidget(self.lbl_zoom, 1)
         right_panel.addWidget(zoom_container)
 
-        right_panel.setSizes([450, 150])
+        right_panel.setSizes([500, 200])
         root.addWidget(right_panel, 1)
 
         self._drop_overlay = DropOverlay(central)
@@ -839,7 +866,6 @@ class MainWindow(QMainWindow):
             if crop.size > 0:
                 lw = max(1, self.lbl_zoom.width())
                 lh = max(1, self.lbl_zoom.height())
-                # Wypelnienie calego widgetu bez paskow
                 zoom_pixmap = _fill_zoom_label(crop, lw, lh)
                 if not zoom_pixmap.isNull():
                     self.lbl_zoom.setPixmap(zoom_pixmap)
@@ -893,7 +919,7 @@ class MainWindow(QMainWindow):
         self.lbl_zoom.setText("Analiza w toku...")
 
         self.worker = WatermarkWorker(
-            self.files,
+            self.files,       # Worker robi list(files) wewnatrz – bezpieczna kopia
             self.spin_conf.value(),
             self.spin_sample.value(),
             self.txt_output_dir.text().strip(),
