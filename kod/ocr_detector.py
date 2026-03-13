@@ -2,13 +2,12 @@
 ocr_detector.py
 
 Detekcja znakow wodnych / napisow AI w obrazach i wideo.
-- Zapis CSV z detekcjami.
-- Konfiguracja progu pewnosci (confidence) oraz probkowania (sample_rate).
-- Opcjonalne drugie przejscie (szczegolowa analiza dwufazowa).
-- Zapisywanie na dysk wersji oryginalnej i przefiltrowanej.
-- Template Matching dla graficznych znakow wodnych.
-- Corner ROI scanning.
-- Silnik OCR: RapidOCR (onnxruntime, bez PyTorch) > PaddleOCR > EasyOCR
+- OCR (RapidOCR / PaddleOCR / EasyOCR)
+- Template Matching
+- Corner ROI scanning
+- Temporal Median Filtering + Zero-Variance ROI  [advanced_detectors]
+- Invisible Watermark (imwatermark DWT/RivaGAN)  [advanced_detectors]
+- FFT Noise Residual analysis                    [advanced_detectors]
 """
 
 from __future__ import annotations
@@ -25,9 +24,10 @@ import cv2
 import numpy as np
 
 import config
+from advanced_detectors import run_advanced_scan
 
 _OCR_READER = None
-_OCR_ENGINE_TYPE = None  # "rapid" | "paddle" | "easyocr"
+_OCR_ENGINE_TYPE = None
 _OCR_INIT_ERROR = None
 _YOLO_MODEL = None
 _OCR_LOCK = threading.Lock()
@@ -35,10 +35,10 @@ _OCR_LOCK = threading.Lock()
 CORNER_RATIO = 0.15
 CORNER_SCALE = 5.0
 
-_LABEL_FONT       = cv2.FONT_HERSHEY_SIMPLEX
-_LABEL_SCALE      = 0.65
-_LABEL_THICKNESS  = 2
-_LABEL_PAD        = 4
+_LABEL_FONT      = cv2.FONT_HERSHEY_SIMPLEX
+_LABEL_SCALE     = 0.65
+_LABEL_THICKNESS = 2
+_LABEL_PAD       = 4
 
 
 class TextTracker:
@@ -71,30 +71,17 @@ class TextTracker:
 
 def _draw_label(img: np.ndarray, text: str, anchor_x: int, anchor_y: int,
                 color=(0, 255, 0), used_rects: list = None) -> tuple:
-    """
-    Rysuje etykiete z czarnym tlem.
-    Gwarantuje ze:
-    - caly napis miesci sie w kadrze (poziomo i pionowo),
-    - nie nachodzi na wczesniej narysowane etykiety (used_rects).
-    """
     h_img, w_img = img.shape[:2]
     (tw, th), baseline = cv2.getTextSize(text, _LABEL_FONT, _LABEL_SCALE, _LABEL_THICKNESS)
-    box_w = tw + 2 * _LABEL_PAD
+    box_w = min(tw + 2 * _LABEL_PAD, w_img)
     box_h = th + baseline + 2 * _LABEL_PAD
 
-    # Ogranicz szerokosc tekstu jesli szerszy niz caly obraz
-    box_w = min(box_w, w_img)
-
-    # Pozycja X: zacznij od x1 bboxa, cofnij jesli wychodzimy za prawy brzeg
     tx = max(0, min(anchor_x, w_img - box_w))
-
-    # Pozycja Y: preferuj nad bboxem, jesli nie ma miejsca - wstaw wewnatrz
     ty = anchor_y - _LABEL_PAD
     if ty - th - _LABEL_PAD < 0:
         ty = anchor_y + box_h
     ty = max(box_h, min(ty, h_img - _LABEL_PAD))
 
-    # Collision avoidance - przesun w dol
     if used_rects is not None:
         for _ in range(40):
             rect = (tx, ty - th - _LABEL_PAD, tx + box_w, ty + baseline + _LABEL_PAD)
@@ -393,16 +380,13 @@ def _ocr_on_image(image: np.ndarray, confidence: float, keywords: List[str]) -> 
             result, _ = reader(image)
             if result:
                 for item in result:
-                    bbox_pts = item[0]
-                    text = item[1]
-                    score = float(item[2]) if item[2] is not None else 0.0
-                    raw_results.append((bbox_pts, text, score))
+                    raw_results.append((item[0], item[1], float(item[2]) if item[2] is not None else 0.0))
         elif _OCR_ENGINE_TYPE == "paddle":
             raw = reader.ocr(image, cls=False)
             if raw and raw[0]:
                 for line in raw[0]:
                     raw_results.append((line[0], line[1][0], line[1][1]))
-        else:  # easyocr
+        else:
             raw_results = reader.readtext(image)
     except Exception:
         return []
@@ -444,8 +428,6 @@ def _perform_scan(
     scale_factor: float = 1.0
 ) -> List[dict]:
     frame_detections = []
-    # found_keys jest WSPOLNA dla calej funkcji - zapobiega duplikatom
-    # miedzy versions_to_scan i corner ROI
     found_keys: set = set()
 
     for (x1, y1, x2, y2, conf, label) in _detect_yolo_watermark(frame_original, confidence):
@@ -480,7 +462,6 @@ def _perform_scan(
     for (corner_name, roi_upscaled, ox, oy) in _extract_corner_rois(frame_original):
         for rv in _corner_versions(roi_upscaled):
             for (bbox, text, prob, kw) in _ocr_on_image(rv, corner_confidence, keywords):
-                # FIX: sprawdzamy globalny found_keys, nie lokalny corner_found
                 if kw in found_keys:
                     continue
                 x1 = ox + int(bbox[0][0] / CORNER_SCALE)
@@ -560,10 +541,90 @@ def scan_for_watermarks(
     found_types: set = set()
     tracker = TextTracker()
 
+    # ----------------------------------------------------------------
+    # FAZA 0: Zaawansowana analiza (temporal median, invisible WM, FFT)
+    # Uruchamiamy na poczatku, na osobnym przebiegu cap
+    # ----------------------------------------------------------------
+    advanced_results: Dict[str, Any] = {}
+    if is_video:
+        try:
+            def _adv_log(msg):
+                print(msg, file=sys.stderr)
+
+            advanced_results = run_advanced_scan(
+                cap=cap,
+                fps=fps,
+                total_frames=total_frames,
+                n_frames_median=40,
+                check_invisible=True,
+                check_fft=True,
+                log_fn=_adv_log
+            )
+            # Zapisz klatke mediany i diff do folderu sesji
+            if advanced_results.get("temporal_median_frame") is not None:
+                cv2.imwrite(
+                    os.path.join(out_dir, "temporal_median.jpg"),
+                    advanced_results["temporal_median_frame"]
+                )
+            if advanced_results.get("overlay_diff") is not None:
+                cv2.imwrite(
+                    os.path.join(out_dir, "overlay_diff.jpg"),
+                    advanced_results["overlay_diff"]
+                )
+            if advanced_results.get("fft_artifacts", {}).get("fft_image") is not None:
+                cv2.imwrite(
+                    os.path.join(out_dir, "fft_noise.jpg"),
+                    advanced_results["fft_artifacts"]["fft_image"]
+                )
+        except Exception as e:
+            print(f"[ADV] Blad analizy zaawansowanej: {e}", file=sys.stderr)
+
+        # Przewin cap na poczatek przed glowna petla OCR
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["Plik", "Typ", "Klatka", "Timestamp", "Typ watermarku",
                          "Confidence", "Tekst", "Ruch", "Zrodlo", "Zapisany plik"])
+
+        # Zapisz wyniki zaawansowane do CSV jako wiersze specjalne
+        if advanced_results:
+            if advanced_results.get("invisible_wm", {}).get("found"):
+                iw = advanced_results["invisible_wm"]
+                writer.writerow([
+                    os.path.basename(media_path), "INVISIBLE_WM", "-", "-",
+                    iw.get("matched", "UNKNOWN"), f"{iw.get('score', 0):.2f}",
+                    iw.get("bits", "")[:32], "-", iw.get("method", ""), "-"
+                ])
+                found_types.add("INVISIBLE_WM")
+                detections_count += 1
+
+            for roi in advanced_results.get("zero_variance_rois", []):
+                writer.writerow([
+                    os.path.basename(media_path), "STATIC_OVERLAY", "-", "-",
+                    roi["name"], f"{roi['score']:.2f}",
+                    "zero-variance ROI", "-", "temporal_analysis", "-"
+                ])
+                found_types.add("STATIC_OVERLAY")
+                detections_count += 1
+
+            if advanced_results.get("fft_artifacts", {}).get("found"):
+                fa = advanced_results["fft_artifacts"]
+                writer.writerow([
+                    os.path.basename(media_path), "FFT_ARTIFACT", "-", "-",
+                    "AI_UPSAMPLE", f"{fa.get('score', 0):.2f}",
+                    fa.get("details", ""), "-", "fft_noise_residual", "-"
+                ])
+                found_types.add("FFT_ARTIFACT")
+                detections_count += 1
+
+        # ----------------------------------------------------------------
+        # FAZA 1: Glowna petla OCR
+        # ----------------------------------------------------------------
+
+        # Jesli mediana dostepna – dodaj ja jako dodatkowa wersje do skanowania
+        median_frame = advanced_results.get("temporal_median_frame")
+        overlay_diff  = advanced_results.get("overlay_diff")
 
         while True:
             if check_stop and check_stop():
@@ -590,6 +651,12 @@ def scan_for_watermarks(
                 ("OCR-INV",   cv2.bitwise_not(frame)),
                 ("OCR-DARK",  darkened),
             ]
+
+            # Dodaj mediane i diff jako dodatkowe wersje jesli sa dostepne
+            if median_frame is not None:
+                versions_to_scan.append(("OCR-TEMPORAL-MEDIAN", median_frame))
+            if overlay_diff is not None:
+                versions_to_scan.append(("OCR-OVERLAY-DIFF", overlay_diff))
 
             frame_detections = _perform_scan(frame, confidence, keywords, versions_to_scan, scale_factor=1.0)
 
@@ -621,6 +688,9 @@ def scan_for_watermarks(
                                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                 preview_callback(frame_to_draw, frame_detections)
 
+        # ----------------------------------------------------------------
+        # FAZA 2: Szczegolowa analiza missed frames
+        # ----------------------------------------------------------------
         if detailed_scan and missed_frames and not (check_stop and check_stop()):
             for i, m_idx in enumerate(missed_frames):
                 if check_stop and check_stop():
@@ -639,6 +709,10 @@ def scan_for_watermarks(
                 _, bw = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
                 aggr_versions.append(("AGGR-BW",   cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)))
                 aggr_versions.append(("AGGR-ORIG", frame))
+                if median_frame is not None:
+                    aggr_versions.append(("AGGR-TEMPORAL", median_frame))
+                if overlay_diff is not None:
+                    aggr_versions.append(("AGGR-DIFF", overlay_diff))
 
                 frame_detections = _perform_scan(frame, confidence, keywords, aggr_versions, scale_factor=2.0)
 
@@ -681,4 +755,5 @@ def scan_for_watermarks(
         "watermark_folder": out_dir,
         "csv_path": csv_path,
         "watermark_frames": saved_paths,
+        "advanced": advanced_results,
     }
