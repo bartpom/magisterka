@@ -45,8 +45,8 @@ COL_CSV    = 5
 
 _SETTINGS_ORG  = "WatermarkDetector"
 _SETTINGS_APP  = "GUI"
-_KEY_MAIN_SPLIT  = "splitter/main3"   # nowy klucz = reset starych zapisow
-_KEY_LEFT_SPLIT  = "splitter/left3"
+_KEY_MAIN_SPLIT  = "splitter/main4"   # nowy klucz = reset starych zapisow
+_KEY_LEFT_SPLIT  = "splitter/left4"
 _KEY_TABLE_COLS  = "table/cols"
 
 # ======================== QSS Themes ========================
@@ -105,19 +105,25 @@ QProgressBar::chunk {
     background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #89b4fa,stop:1 #a6e3a1); border-radius: 4px;
 }
 QSplitter::handle:horizontal {
-    width: 6px;
+    width: 14px;
+    background-color: #313244;
+    border-left: 1px solid #45475a;
+    border-right: 1px solid #45475a;
+    image: url(none);
+}
+QSplitter::handle:horizontal:hover {
     background-color: #45475a;
-    border-left: 1px solid #313244;
-    border-right: 1px solid #313244;
+    border-left: 1px solid #89b4fa;
+    border-right: 1px solid #89b4fa;
 }
 QSplitter::handle:vertical {
-    height: 6px;
-    background-color: #45475a;
-    border-top: 1px solid #313244;
-    border-bottom: 1px solid #313244;
+    height: 8px;
+    background-color: #313244;
+    border-top: 1px solid #45475a;
+    border-bottom: 1px solid #45475a;
 }
-QSplitter::handle:hover {
-    background-color: #89b4fa;
+QSplitter::handle:vertical:hover {
+    background-color: #45475a;
 }
 QStatusBar { background-color: #181825; color: #6c7086; border-top: 1px solid #45475a; }
 QLabel#preview_label, QLabel#zoom_label {
@@ -179,19 +185,24 @@ QProgressBar::chunk {
     background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #1e66f5,stop:1 #40a02b); border-radius: 4px;
 }
 QSplitter::handle:horizontal {
-    width: 6px;
-    background-color: #bcc0cc;
-    border-left: 1px solid #ccd0da;
-    border-right: 1px solid #ccd0da;
+    width: 14px;
+    background-color: #dce0e8;
+    border-left: 1px solid #bcc0cc;
+    border-right: 1px solid #bcc0cc;
+}
+QSplitter::handle:horizontal:hover {
+    background-color: #c0c4d0;
+    border-left: 1px solid #1e66f5;
+    border-right: 1px solid #1e66f5;
 }
 QSplitter::handle:vertical {
-    height: 6px;
-    background-color: #bcc0cc;
-    border-top: 1px solid #ccd0da;
-    border-bottom: 1px solid #ccd0da;
+    height: 8px;
+    background-color: #dce0e8;
+    border-top: 1px solid #bcc0cc;
+    border-bottom: 1px solid #bcc0cc;
 }
-QSplitter::handle:hover {
-    background-color: #1e66f5;
+QSplitter::handle:vertical:hover {
+    background-color: #c0c4d0;
 }
 QStatusBar { background-color: #dce0e8; color: #9ca0b0; border-top: 1px solid #bcc0cc; }
 QLabel#preview_label, QLabel#zoom_label {
@@ -231,6 +242,41 @@ class ToggleSwitch(QtWidgets.QAbstractButton):
             p.drawText(52, 0, self.width() - 52, 26,
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self._label)
         p.end()
+
+
+# ======================== SplitterHandle z ikona ========================
+
+class GripSplitterHandle(QtWidgets.QSplitterHandle):
+    """
+    Niestandardowy uchwyt splittera poziomego z narysowana ikona uchwytу (3 kropki).
+    Kursor zmienia sie na SizeHorCursor przy najechaniu.
+    """
+    def __init__(self, orientation, parent):
+        super().__init__(orientation, parent)
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        dot_color = QtGui.QColor("#89b4fa")
+        p.setBrush(dot_color)
+        p.setPen(Qt.PenStyle.NoPen)
+        cx = self.width() // 2
+        cy = self.height() // 2
+        r = 3
+        gap = 9
+        for dy in (-gap, 0, gap):
+            p.drawEllipse(cx - r, cy + dy - r, r * 2, r * 2)
+        p.end()
+
+
+class GripSplitter(QSplitter):
+    """QSplitter z GripSplitterHandle tylko dla poziomej orientacji."""
+    def createHandle(self):
+        if self.orientation() == Qt.Orientation.Horizontal:
+            return GripSplitterHandle(self.orientation(), self)
+        return super().createHandle()
 
 
 # ======================== Drop Overlay ========================
@@ -344,7 +390,6 @@ def _fill_zoom_label(crop_bgr: np.ndarray, label_w: int, label_h: int) -> QPixma
 
 
 def _zero_min(widget: QWidget) -> QWidget:
-    """Ustawia minimumSize(0,0) i zwraca widget - helper do jednolinijkowego uzycia."""
     widget.setMinimumSize(0, 0)
     return widget
 
@@ -352,10 +397,6 @@ def _zero_min(widget: QWidget) -> QWidget:
 # ======================== AspectRatioWidget (16:9 container) ========================
 
 class AspectRatioWidget(QWidget):
-    """
-    Kontener zachowujacy proporcje 16:9.
-    inner NIE jest w layoutcie — pozycjonowany przez setGeometry w resizeEvent.
-    """
     def __init__(self, inner: QLabel, aspect_w: int = 16, aspect_h: int = 9, parent=None):
         super().__init__(parent)
         self._inner = inner
@@ -364,12 +405,12 @@ class AspectRatioWidget(QWidget):
         inner.setParent(self)
         self.setMinimumSize(0, 0)
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Ignored,   # Ignored = Qt nie wymusza sizeHint
+            QtWidgets.QSizePolicy.Policy.Ignored,
             QtWidgets.QSizePolicy.Policy.Ignored,
         )
 
     def sizeHint(self):
-        return QtCore.QSize(1, 1)  # minimalny hint = splitter moze zwezac do 0
+        return QtCore.QSize(1, 1)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -547,14 +588,16 @@ class MainWindow(QMainWindow):
 
         # ============================================================
         # GLOWNY POZIOMY SPLITTER: lewy panel <-> prawy panel
+        # GripSplitter = niestandardowy uchwyt z 3 kropkami i kursorem
         # ============================================================
-        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter = GripSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.setHandleWidth(16)  # szerokosc uchwytu w px
         root_layout.addWidget(self.main_splitter)
 
         # ---- LEFT PANEL ----
         left_panel = QWidget()
-        left_panel.setMinimumSize(0, 0)
+        left_panel.setMinimumWidth(300)  # lewy panel nie moze byc wezszy niz 300px
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 4, 0)
         left_layout.setSpacing(6)
@@ -645,9 +688,7 @@ class MainWindow(QMainWindow):
         self.btn_stop.clicked.connect(self.stop_analysis)
         top.addWidget(self.btn_stop)
 
-        # ============================================================
-        # LEWY PIONOWY SPLITTER: tabela <-> logi
-        # ============================================================
+        # Pionowy splitter: tabela <-> logi
         self.left_splitter = QSplitter(Qt.Orientation.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
         left_layout.addWidget(self.left_splitter, 1)
@@ -706,10 +747,9 @@ class MainWindow(QMainWindow):
 
         self.main_splitter.addWidget(left_panel)
 
-        # ---- RIGHT PANEL ----
-        # Prosty QVBoxLayout - bez pionowego splittera
+        # ---- RIGHT PANEL (podglady) ----
         right_panel = QWidget()
-        right_panel.setMinimumSize(0, 0)  # KLUCZOWE: prawy panel moze byc dowolnie waski
+        right_panel.setMinimumWidth(200)  # podglad nie moze zniknac calkowicie
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(4, 0, 0, 0)
         right_layout.setSpacing(4)
@@ -723,7 +763,6 @@ class MainWindow(QMainWindow):
         self.lbl_preview.setObjectName("preview_label")
         self.lbl_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_preview.setMinimumSize(0, 0)
-        # AspectRatioWidget z sizePolicy=Ignored -> Qt nie wymusza sizeHint jako minimum
         self._preview_ar = AspectRatioWidget(self.lbl_preview, 16, 9)
         right_layout.addWidget(self._preview_ar, 3)
 
@@ -744,13 +783,9 @@ class MainWindow(QMainWindow):
 
         self.main_splitter.addWidget(right_panel)
 
-        # stretch + minimumSize(0,0) na dzieciach main_splitter
-        self.main_splitter.setStretchFactor(0, 2)
+        # Domyslna proporcja 50/50 (zapisywana i wczytywana z QSettings)
+        self.main_splitter.setStretchFactor(0, 1)
         self.main_splitter.setStretchFactor(1, 1)
-        for i in range(self.main_splitter.count()):
-            w = self.main_splitter.widget(i)
-            if w:
-                w.setMinimumSize(0, 0)
 
         self._drop_overlay = DropOverlay(central)
         self._drop_overlay.setGeometry(central.rect())
@@ -787,9 +822,12 @@ class MainWindow(QMainWindow):
                     raise ValueError("bad sizes")
             except Exception:
                 self._settings.remove(_KEY_MAIN_SPLIT)
-                self.main_splitter.setSizes([int(total_w * 0.65), int(total_w * 0.35)])
+                # domyslnie 50/50
+                half = total_w // 2
+                self.main_splitter.setSizes([half, total_w - half])
         else:
-            self.main_splitter.setSizes([int(total_w * 0.65), int(total_w * 0.35)])
+            half = total_w // 2
+            self.main_splitter.setSizes([half, total_w - half])
 
         total_h = self.left_splitter.height()
         data2 = self._settings.value(_KEY_LEFT_SPLIT)
