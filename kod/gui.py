@@ -45,8 +45,8 @@ COL_CSV    = 5
 
 _SETTINGS_ORG  = "WatermarkDetector"
 _SETTINGS_APP  = "GUI"
-_KEY_MAIN_SPLIT  = "splitter/main2"   # zmieniony klucz = reset starych zapisow
-_KEY_LEFT_SPLIT  = "splitter/left2"
+_KEY_MAIN_SPLIT  = "splitter/main3"   # nowy klucz = reset starych zapisow
+_KEY_LEFT_SPLIT  = "splitter/left3"
 _KEY_TABLE_COLS  = "table/cols"
 
 # ======================== QSS Themes ========================
@@ -343,6 +343,12 @@ def _fill_zoom_label(crop_bgr: np.ndarray, label_w: int, label_h: int) -> QPixma
     return QPixmap.fromImage(qt_img)
 
 
+def _zero_min(widget: QWidget) -> QWidget:
+    """Ustawia minimumSize(0,0) i zwraca widget - helper do jednolinijkowego uzycia."""
+    widget.setMinimumSize(0, 0)
+    return widget
+
+
 # ======================== AspectRatioWidget (16:9 container) ========================
 
 class AspectRatioWidget(QWidget):
@@ -358,9 +364,12 @@ class AspectRatioWidget(QWidget):
         inner.setParent(self)
         self.setMinimumSize(0, 0)
         self.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding,
-            QtWidgets.QSizePolicy.Policy.Expanding
+            QtWidgets.QSizePolicy.Policy.Ignored,   # Ignored = Qt nie wymusza sizeHint
+            QtWidgets.QSizePolicy.Policy.Ignored,
         )
+
+    def sizeHint(self):
+        return QtCore.QSize(1, 1)  # minimalny hint = splitter moze zwezac do 0
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -649,11 +658,9 @@ class MainWindow(QMainWindow):
         self.table_results.setHorizontalHeaderLabels([
             "Plik", "Typ", "Status AI", "% AI w wideo", "C2PA", "Raport CSV"
         ])
-        # Wszystkie kolumny Interactive = uzytkownik moze przeciagac
         hh = self.table_results.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        hh.setStretchLastSection(True)   # ostatnia (Raport CSV) wypelnia reszte
-        # Domyslne szerokosci kolumn (w px) - beda nadpisane przez QSettings
+        hh.setStretchLastSection(True)
         _default_col_widths = [200, 55, 130, 160, 60, 200]
         for col, w in enumerate(_default_col_widths):
             self.table_results.setColumnWidth(col, w)
@@ -669,7 +676,6 @@ class MainWindow(QMainWindow):
         self.logView.setMinimumSize(0, 0)
         self.left_splitter.addWidget(self.logView)
 
-        # stretch: tabela dostaje 3x wiecej miejsca niz logi
         self.left_splitter.setStretchFactor(0, 3)
         self.left_splitter.setStretchFactor(1, 1)
 
@@ -701,28 +707,29 @@ class MainWindow(QMainWindow):
         self.main_splitter.addWidget(left_panel)
 
         # ---- RIGHT PANEL ----
-        # Prosty QVBoxLayout - podglad na gorze (60%), zoom na dole (40%)
-        # Brak pionowego splittera - uzytkownik nie moze przeciagac w pionie
+        # Prosty QVBoxLayout - bez pionowego splittera
         right_panel = QWidget()
-        right_panel.setMinimumSize(0, 0)
+        right_panel.setMinimumSize(0, 0)  # KLUCZOWE: prawy panel moze byc dowolnie waski
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(4, 0, 0, 0)
-        right_layout.setSpacing(6)
+        right_layout.setSpacing(4)
 
-        # -- Podglad klatki (16:9) --
         lbl_title = QLabel("<b>Klatka z kamery:</b>")
         lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_title.setMinimumSize(0, 0)
         right_layout.addWidget(lbl_title)
 
         self.lbl_preview = QLabel("Brak podglądu")
         self.lbl_preview.setObjectName("preview_label")
         self.lbl_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_preview.setMinimumSize(0, 0)
+        # AspectRatioWidget z sizePolicy=Ignored -> Qt nie wymusza sizeHint jako minimum
         self._preview_ar = AspectRatioWidget(self.lbl_preview, 16, 9)
-        right_layout.addWidget(self._preview_ar, 3)   # 3 czesci z 5
+        right_layout.addWidget(self._preview_ar, 3)
 
-        # -- Zoom detekcji --
         lbl_zoom_title = QLabel("<b>Przybliżenie detekcji (Zoom):</b>")
         lbl_zoom_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_zoom_title.setMinimumSize(0, 0)
         right_layout.addWidget(lbl_zoom_title)
 
         self.lbl_zoom = QLabel("Brak detekcji")
@@ -730,16 +737,16 @@ class MainWindow(QMainWindow):
         self.lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_zoom.setMinimumSize(0, 0)
         self.lbl_zoom.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Ignored,
         )
-        right_layout.addWidget(self.lbl_zoom, 2)       # 2 czesci z 5
+        right_layout.addWidget(self.lbl_zoom, 2)
 
         self.main_splitter.addWidget(right_panel)
 
-        # stretch: lewy dostaje 2, prawy 1
+        # stretch + minimumSize(0,0) na dzieciach main_splitter
         self.main_splitter.setStretchFactor(0, 2)
         self.main_splitter.setStretchFactor(1, 1)
-        # minimumSize(0,0) na dzieciach splittera
         for i in range(self.main_splitter.count()):
             w = self.main_splitter.widget(i)
             if w:
@@ -771,7 +778,6 @@ class MainWindow(QMainWindow):
 
     def _restore_splitters(self):
         total_w = self.main_splitter.width()
-        # main splitter: 65% lewy / 35% prawy
         data = self._settings.value(_KEY_MAIN_SPLIT)
         if data is not None:
             try:
@@ -786,7 +792,6 @@ class MainWindow(QMainWindow):
             self.main_splitter.setSizes([int(total_w * 0.65), int(total_w * 0.35)])
 
         total_h = self.left_splitter.height()
-        # left splitter: 65% tabela / 35% logi
         data2 = self._settings.value(_KEY_LEFT_SPLIT)
         if data2 is not None:
             try:
@@ -800,7 +805,6 @@ class MainWindow(QMainWindow):
         else:
             self.left_splitter.setSizes([int(total_h * 0.65), int(total_h * 0.35)])
 
-        # szerokosci kolumn tabeli
         col_data = self._settings.value(_KEY_TABLE_COLS)
         if col_data is not None:
             try:
@@ -814,7 +818,6 @@ class MainWindow(QMainWindow):
     def _save_splitters(self):
         self._settings.setValue(_KEY_MAIN_SPLIT, self.main_splitter.saveState())
         self._settings.setValue(_KEY_LEFT_SPLIT, self.left_splitter.saveState())
-        # zapisz szerokosci kolumn (bez ostatniej bo jest stretch)
         widths = [self.table_results.columnWidth(c)
                   for c in range(self.table_results.columnCount() - 1)]
         self._settings.setValue(_KEY_TABLE_COLS, widths)
