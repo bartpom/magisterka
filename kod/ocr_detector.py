@@ -4,10 +4,11 @@ ocr_detector.py
 Detekcja znakow wodnych / napisow AI w obrazach i wideo.
 - OCR (RapidOCR / PaddleOCR / EasyOCR)
 - Template Matching
-- Corner ROI scanning
+- Corner ROI scanning  [Super-Resolution via super_resolution.upscale_for_ocr]
 - Temporal Median Filtering + Zero-Variance ROI  [advanced_detectors]
 - Invisible Watermark (imwatermark DWT/RivaGAN)  [advanced_detectors]
 - FFT Noise Residual analysis                    [advanced_detectors]
+- Optical Flow overlay detection                 [advanced_detectors]
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ import numpy as np
 
 import config
 from advanced_detectors import run_advanced_scan
+import super_resolution  # Super-Resolution przed OCR (EDSR/FSRCNN, fallback INTER_CUBIC)
 
 _OCR_READER = None
 _OCR_ENGINE_TYPE = None
@@ -33,7 +35,10 @@ _YOLO_MODEL = None
 _OCR_LOCK = threading.Lock()
 
 CORNER_RATIO = 0.15
-CORNER_SCALE = 5.0
+# CORNER_SCALE uzywany tylko do przeliczania wspolrzednych bbox z powrotem na oryginalne
+# Faktyczne powiekszenie ROI delegowane do super_resolution.upscale_for_ocr()
+CORNER_SCALE = 4.0   # max skalar SR (x4) – uzyj do back-projekcji bbox
+_SR_TARGET_MIN_DIM = 120  # minimalna dlugosc krotszego boku ROI podawanego do OCR
 
 _LABEL_FONT      = cv2.FONT_HERSHEY_SIMPLEX
 _LABEL_SCALE     = 0.55
@@ -73,7 +78,6 @@ def _draw_label(img: np.ndarray, text: str, anchor_x: int, anchor_y: int,
                 color=(0, 255, 0), used_rects: list = None) -> tuple:
     """
     Rysuje etykiete PONIZEJ punktu anchor (anchor_y = dolna krawedz bbox).
-    Dzieki temu napis nie zasłania zielonej ramki detekcji.
     """
     h_img, w_img = img.shape[:2]
     (tw, th), baseline = cv2.getTextSize(text, _LABEL_FONT, _LABEL_SCALE, _LABEL_THICKNESS)
@@ -82,10 +86,8 @@ def _draw_label(img: np.ndarray, text: str, anchor_x: int, anchor_y: int,
 
     tx = max(0, min(anchor_x, w_img - box_w))
 
-    # Umieszczamy etykiete pod bbox; jesli nie ma miejsca na dole — przesuwamy nad bbox
-    ty_below = anchor_y + _LABEL_PAD + th  # dolna krawedz tekstu przy rysowaniu pod
+    ty_below = anchor_y + _LABEL_PAD + th
     if anchor_y + box_h > h_img:
-        # Brak miejsca pod — rysuj nad
         ty_below = anchor_y - _LABEL_PAD
     ty = max(th + _LABEL_PAD, min(ty_below, h_img - baseline - _LABEL_PAD))
 
@@ -324,6 +326,14 @@ def _make_session_dir(input_path: str) -> str:
 
 
 def _extract_corner_rois(frame_bgr: np.ndarray) -> List[Tuple[str, np.ndarray, int, int]]:
+    """
+    Wycina narozniki kadru i powiekasza je Super-Resolution (EDSR/FSRCNN)
+    zamiast kubicznego resize. Jesli model SR niedostepny – automatyczny
+    fallback do INTER_CUBIC wewnatrz super_resolution.upscale_for_ocr().
+
+    Zwracany CORNER_SCALE odzwierciedla faktyczny uzyty skalar SR (2 lub 4)
+    potrzebny do back-projekcji bbox na wspolrzedne oryginalnej klatki.
+    """
     h, w = frame_bgr.shape[:2]
     ch = int(h * CORNER_RATIO)
     cw = int(w * CORNER_RATIO)
@@ -337,9 +347,22 @@ def _extract_corner_rois(frame_bgr: np.ndarray) -> List[Tuple[str, np.ndarray, i
     for name, roi, ox, oy in corners:
         if roi.size == 0:
             continue
-        upscaled = cv2.resize(roi, None, fx=CORNER_SCALE, fy=CORNER_SCALE, interpolation=cv2.INTER_CUBIC)
+        # Super-Resolution: automatycznie dobiera x2 lub x4 tak, zeby
+        # krotszy bok mial co najmniej _SR_TARGET_MIN_DIM pikseli.
+        # Jesli brak modelu SR -> fallback INTER_CUBIC (zero crashy).
+        upscaled = super_resolution.upscale_for_ocr(roi, target_min_dim=_SR_TARGET_MIN_DIM)
         result.append((name, upscaled, ox, oy))
     return result
+
+
+def _get_actual_corner_scale(roi_original: np.ndarray, roi_upscaled: np.ndarray) -> float:
+    """
+    Oblicza faktyczny skalar powiekszenia (szerokos upscaled / szerokos oryginalu).
+    Uzywane do precyzyjnej back-projekcji wspolrzednych bbox na oryginalna klatke.
+    """
+    if roi_original.shape[1] == 0:
+        return CORNER_SCALE
+    return roi_upscaled.shape[1] / roi_original.shape[1]
 
 
 def _corner_versions(roi_upscaled: np.ndarray) -> List[np.ndarray]:
@@ -467,14 +490,20 @@ def _perform_scan(
     corner_confidence = max(0.25, confidence - 0.25)
 
     for (corner_name, roi_upscaled, ox, oy) in _extract_corner_rois(frame_original):
+        # Oblicz faktyczny skalar SR dla tej konkretnej ROI
+        orig_h = int(h_orig * CORNER_RATIO)
+        orig_w = int(w_orig * CORNER_RATIO)
+        actual_scale_x = roi_upscaled.shape[1] / max(orig_w, 1)
+        actual_scale_y = roi_upscaled.shape[0] / max(orig_h, 1)
+
         for rv in _corner_versions(roi_upscaled):
             for (bbox, text, prob, kw) in _ocr_on_image(rv, corner_confidence, keywords):
                 if kw in found_keys:
                     continue
-                x1 = ox + int(bbox[0][0] / CORNER_SCALE)
-                y1 = oy + int(bbox[0][1] / CORNER_SCALE)
-                x2 = ox + int(bbox[2][0] / CORNER_SCALE)
-                y2 = oy + int(bbox[2][1] / CORNER_SCALE)
+                x1 = ox + int(bbox[0][0] / actual_scale_x)
+                y1 = oy + int(bbox[0][1] / actual_scale_y)
+                x2 = ox + int(bbox[2][0] / actual_scale_x)
+                y2 = oy + int(bbox[2][1] / actual_scale_y)
                 x1, x2 = max(0, x1), min(w_orig, x2)
                 y1, y2 = max(0, y1), min(h_orig, y2)
                 frame_detections.append({"type": kw, "confidence": prob, "text": str(text).upper(),
@@ -486,23 +515,15 @@ def _perform_scan(
 
 def _annotate_frame(frame: np.ndarray, detections: List[dict], tracker: 'TextTracker',
                     frame_idx: int, aggr: bool = False) -> Dict[str, str]:
-    """
-    Rysuje ramki i etykiety na klatce.
-    Etykieta jest rysowana POD bbox (anchor_y=y2), dzieki czemu nie zasłania zielonej ramki.
-    """
     used_rects: List[Tuple] = []
     motion_map: Dict[str, str] = {}
 
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
-
         motion = tracker.update(frame_idx, det['type'], det['bbox'])
         motion_map[det['type']] = motion
-
         conf_pct = int(det['confidence'] * 100)
         label = f"{det['type']} {conf_pct}%" + ("*" if aggr else "")
-
-        # Najpierw ramka, potem etykieta POD nia (anchor_y = y2)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
         _draw_label(frame, label, anchor_x=x1, anchor_y=y2,
                     color=(0, 255, 0), used_rects=used_rects)
@@ -563,7 +584,7 @@ def scan_for_watermarks(
     tracker = TextTracker()
 
     # ----------------------------------------------------------------
-    # FAZA 0: Zaawansowana analiza (temporal median, invisible WM, FFT)
+    # FAZA 0: Zaawansowana analiza
     # ----------------------------------------------------------------
     advanced_results: Dict[str, Any] = {}
     if is_video:
@@ -578,6 +599,7 @@ def scan_for_watermarks(
                 n_frames_median=40,
                 check_invisible=True,
                 check_fft=True,
+                check_optical_flow=True,
                 log_fn=_adv_log
             )
             if advanced_results.get("temporal_median_frame") is not None:
@@ -623,6 +645,16 @@ def scan_for_watermarks(
                     "zero-variance ROI", "-", "temporal_analysis", "-"
                 ])
                 found_types.add("STATIC_OVERLAY")
+                detections_count += 1
+
+            for roi in advanced_results.get("optical_flow_rois", []):
+                writer.writerow([
+                    os.path.basename(media_path), "OF_STATIC_OVERLAY", "-", "-",
+                    roi["name"], f"{roi['score']:.2f}",
+                    f"optical_flow global_motion={roi.get('global_motion', 0):.2f}px",
+                    "-", "optical_flow_farneback", "-"
+                ])
+                found_types.add("OF_STATIC_OVERLAY")
                 detections_count += 1
 
             if advanced_results.get("fft_artifacts", {}).get("found"):

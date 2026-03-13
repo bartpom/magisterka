@@ -7,13 +7,7 @@ Zaawansowane metody detekcji znakow wodnych:
 3. Noise Residual / FFT       – wykrywa periodyczne artefakty upsamplingu AI
 4. Zero-Variance ROI          – wykrywa regiony bez zmian w czasie (statyczny overlay)
 5. Optical Flow Overlay       – wykrywa statyczne piksele mimo globalnego ruchu kamery
-
-Kazda metoda zwraca slownik z kluczami:
-  found   : bool
-  method  : str
-  details : str       (opis znaleziska)
-  score   : float     (0-1, pewnosc)
-  image   : np.ndarray | None   (obraz diagnostyczny, opcjonalny)
+                                 przez analize konturow na mapie static_mask (Farneback)
 """
 
 from __future__ import annotations
@@ -33,20 +27,13 @@ def build_temporal_median(
     frames: List[np.ndarray],
     max_frames: int = 50
 ) -> np.ndarray:
-    """
-    Oblicza mediane po osi czasu dla listy klatek BGR.
-    Ruchome obiekty 'znikaja', statyczny znak wodny pozostaje ostry.
-    """
     if not frames:
         raise ValueError("Pusta lista klatek")
-
     if len(frames) > max_frames:
         step = len(frames) // max_frames
         frames = frames[::step][:max_frames]
-
     stack = np.stack([f.astype(np.float32) for f in frames], axis=0)
-    median_frame = np.median(stack, axis=0).astype(np.uint8)
-    return median_frame
+    return np.median(stack, axis=0).astype(np.uint8)
 
 
 def extract_static_overlay(
@@ -54,14 +41,9 @@ def extract_static_overlay(
     reference_frame: np.ndarray,
     amp: float = 4.0
 ) -> np.ndarray:
-    """
-    Odejmuje mediane od klatki referencyjnej i wzmacnia roznice.
-    Efekt: statyczny overlay (znak wodny) staje sie widoczny.
-    """
     diff = cv2.absdiff(reference_frame.astype(np.float32),
                        median_frame.astype(np.float32))
-    diff = np.clip(diff * amp, 0, 255).astype(np.uint8)
-    return diff
+    return np.clip(diff * amp, 0, 255).astype(np.uint8)
 
 
 def detect_zero_variance_rois(
@@ -70,30 +52,20 @@ def detect_zero_variance_rois(
     variance_threshold: float = 8.0,
     min_fraction: float = 0.30
 ) -> List[Dict[str, Any]]:
-    """
-    Szuka naroznikow kadru z wariancja pixelow bliska 0 –
-    silna heurystyka nalozone statycznego elementu.
-    """
     if len(frames) < 5:
         return []
-
     h, w = frames[0].shape[:2]
-    ch = int(h * corner_ratio)
-    cw = int(w * corner_ratio)
-
+    ch, cw = int(h * corner_ratio), int(w * corner_ratio)
     corners = [
         ("CORNER-TL", (0,      0,      cw,     ch)),
         ("CORNER-TR", (w - cw, 0,      w,      ch)),
         ("CORNER-BL", (0,      h - ch, cw,     h)),
         ("CORNER-BR", (w - cw, h - ch, w,      h)),
     ]
-
     gray_stack = np.stack(
-        [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32) for f in frames],
-        axis=0
+        [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY).astype(np.float32) for f in frames], axis=0
     )
     variance_map = np.var(gray_stack, axis=0)
-
     results = []
     for name, (x1, y1, x2, y2) in corners:
         roi_var = variance_map[y1:y2, x1:x2]
@@ -101,84 +73,68 @@ def detect_zero_variance_rois(
             continue
         low_var_fraction = float(np.mean(roi_var < variance_threshold))
         if low_var_fraction >= min_fraction:
-            results.append({
-                "name": name,
-                "bbox": (x1, y1, x2, y2),
-                "score": low_var_fraction,
-                "variance_map": roi_var
-            })
+            results.append({"name": name, "bbox": (x1, y1, x2, y2),
+                             "score": low_var_fraction, "variance_map": roi_var})
     return results
 
 
 # ---------------------------------------------------------------------------
-# 5. OPTICAL FLOW OVERLAY DETECTION
+# 5. OPTICAL FLOW OVERLAY DETECTION (Farneback + contour search)
 # ---------------------------------------------------------------------------
 
 def detect_optical_flow_overlay(
     frames: List[np.ndarray],
     flow_zero_threshold: float = 0.5,
     min_global_motion: float = 0.8,
-    min_static_fraction: float = 0.10,
-    corner_ratio: float = 0.25
+    min_contour_area: int = 40,
+    morph_kernel_size: int = 5
 ) -> List[Dict[str, Any]]:
     """
-    Wykrywa statyczne piksele (nalozone overlaye / watermarki) pomimo
-    globalnego ruchu kamery (panning, tilt) przy uzyciu gestego
-    Optical Flow (algorytm Farneback).
+    Wykrywa statyczne piksele (nalozone overlaye) pomimo globalnego ruchu kamery.
 
-    Logika:
-    - Oblicza Dense Optical Flow miedzy kolejnymi parami klatek.
-    - Jesli sredni ruch globalny > min_global_motion (kamera sie rusza),
-      wyszukuje piksele w naroznikach, ktorych wektor ruchu jest bliski 0.
-    - Piksele statyczne pomimo globalnego ruchu = nalozone w post-produkcji.
+    Algorytm:
+    1. Dense Optical Flow Farneback miedzy kolejnymi parami klatek.
+    2. Akumulacja sredniej mapy ruchu.
+    3. Jesli global_mean_motion < min_global_motion -> kamera stoi -> zwroc [] 
+       (klasyczne zero-variance wystarczy, OF nic nie wnosi).
+    4. Binaryzacja: piksele z ruchem < flow_zero_threshold = 'statyczne'.
+    5. Morfologiczne zamkniecie (CLOSE) laczace bliskie litery w jedna bryle.
+    6. cv2.findContours -> filtracja po polu powierzchni -> cv2.boundingRect.
+       BRAK sztywnego ograniczenia do naroznikow: wykrywa watermarki w centrum,
+       na dole kadru, oraz jest odporny na crop-attack (przycinanie krawedzi).
 
     Args:
-        frames             : lista klatek BGR (minimum 3)
-        flow_zero_threshold: prog dlugosci wektora ruchu – ponizej = 'statyczny'
-        min_global_motion  : minimalny sredni ruch globalny (px) aby analiza miala sens
-        min_static_fraction: jaki procent pikseli ROI musi byc statyczny
-        corner_ratio       : jaka czesc krawedzi kadru analizowac
+        frames             : lista klatek BGR (min. 3)
+        flow_zero_threshold: prog wektora ruchu (px) – ponizej = statyczny
+        min_global_motion  : minimalny globalny ruch (px/klatke) by OF mial sens
+        min_contour_area   : minimalne pole konturu (eliminuje szum kompresji)
+        morph_kernel_size  : rozmiar kernela morfologicznego zamkniecia
 
     Returns:
-        Lista slownikow {name, bbox, score, flow_mask} lub [] jesli brak ruchu kamery
+        Lista {name, bbox, score, area, global_motion} lub []
     """
     if len(frames) < 3:
         return []
 
     h, w = frames[0].shape[:2]
-    ch = int(h * corner_ratio)
-    cw = int(w * corner_ratio)
 
-    corners = [
-        ("OF-TL", (0,      0,      cw,     ch)),
-        ("OF-TR", (w - cw, 0,      w,      ch)),
-        ("OF-BL", (0,      h - ch, cw,     h)),
-        ("OF-BR", (w - cw, h - ch, w,      h)),
-    ]
-
-    # Parametry Farneback – wystarczajace dla detekcji watermarkow
     _FB_PARAMS = dict(
         pyr_scale=0.5, levels=3, winsize=15,
         iterations=3, poly_n=5, poly_sigma=1.2, flags=0
     )
 
-    # Akumuluj mape ruchu przez pary klatek
+    # Akumuluj mape ruchu (probkuj max 10 par klatek)
+    step = max(1, len(frames) // 10)
+    sampled = frames[::step][:11]  # max 11 klatek -> 10 par
+
     magnitude_acc = np.zeros((h, w), dtype=np.float32)
     n_pairs = 0
-
-    # Uzywaj co 3. klatki – szybkosć vs dokladnosc
-    step = max(1, len(frames) // 10)
-    sampled = frames[::step][:10]
-
     prev_gray = cv2.cvtColor(sampled[0], cv2.COLOR_BGR2GRAY)
     for curr_frame in sampled[1:]:
         curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
         try:
-            flow = cv2.calcOpticalFlowFarneback(
-                prev_gray, curr_gray, None, **_FB_PARAMS
-            )
-            mag = np.sqrt(flow[..., 0] ** 2 + flow[..., 1] ** 2)
-            magnitude_acc += mag
+            flow = cv2.calcOpticalFlowFarneback(prev_gray, curr_gray, None, **_FB_PARAMS)
+            magnitude_acc += np.sqrt(flow[..., 0] ** 2 + flow[..., 1] ** 2)
             n_pairs += 1
         except Exception:
             pass
@@ -190,28 +146,59 @@ def detect_optical_flow_overlay(
     avg_magnitude = magnitude_acc / n_pairs
     global_mean_motion = float(np.mean(avg_magnitude))
 
-    # Jesli kamera stoi – klasyczna zero-variance wystarczy, OF nic nie wnosi
     if global_mean_motion < min_global_motion:
-        return []
+        return []  # kamera stoi – zero-variance wystarczy
 
-    # Mapa pikseli 'statycznych' pomimo ruchu kamery
-    static_mask = (avg_magnitude < flow_zero_threshold).astype(np.uint8)
+    # Binaryzacja: piksele statyczne = 255
+    static_mask = np.where(avg_magnitude < flow_zero_threshold,
+                           np.uint8(255), np.uint8(0))
+
+    # Morfologiczne zamkniecie – laczy bliskie litery napisu w jedna bryle
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (morph_kernel_size, morph_kernel_size)
+    )
+    closed_mask = cv2.morphologyEx(static_mask, cv2.MORPH_CLOSE, kernel)
+
+    # Znajdz kontury na calym kadrze (nie tylko w naroznikach!)
+    contours, _ = cv2.findContours(
+        closed_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
 
     results = []
-    for name, (x1, y1, x2, y2) in corners:
-        roi_mask = static_mask[y1:y2, x1:x2]
-        if roi_mask.size == 0:
-            continue
-        static_fraction = float(np.mean(roi_mask))
-        if static_fraction >= min_static_fraction:
-            results.append({
-                "name": name,
-                "bbox": (x1, y1, x2, y2),
-                "score": static_fraction,
-                "flow_mask": roi_mask,
-                "global_motion": global_mean_motion
-            })
+    for i, cnt in enumerate(contours):
+        area = cv2.contourArea(cnt)
+        if area < min_contour_area:
+            continue  # szum kompresji wideo
 
+        bx, by, bw_cnt, bh_cnt = cv2.boundingRect(cnt)
+
+        # Fraction statycznych pikseli wewnatrz bounding box
+        roi_mask = static_mask[by:by + bh_cnt, bx:bx + bw_cnt]
+        score = float(np.mean(roi_mask > 0)) if roi_mask.size > 0 else 0.0
+
+        # Nazwa na podstawie pozycji w kadrze
+        cx_rel = (bx + bw_cnt / 2) / w
+        cy_rel = (by + bh_cnt / 2) / h
+        pos_name = (
+            "OF-TOP" if cy_rel < 0.25 else
+            "OF-BOTTOM" if cy_rel > 0.75 else
+            "OF-CENTER"
+        )
+        if cx_rel < 0.25:
+            pos_name += "-L"
+        elif cx_rel > 0.75:
+            pos_name += "-R"
+
+        results.append({
+            "name": f"{pos_name}-{i}",
+            "bbox": (bx, by, bx + bw_cnt, by + bh_cnt),
+            "score": score,
+            "area": area,
+            "global_motion": global_mean_motion
+        })
+
+    # Sortuj malejaco wg pola – najwazniejsze kontury najpierw
+    results.sort(key=lambda x: x["area"], reverse=True)
     return results
 
 
@@ -242,10 +229,6 @@ def _check_imwatermark() -> bool:
 
 
 def _torch_available() -> bool:
-    """
-    Sprawdza czy torch jest dostepny BEZ faktycznego importowania go teraz.
-    Unika bledu DLL (WinError 1114) przy starcie na maszynach bez CUDA.
-    """
     if 'torch' in sys.modules:
         return True
     try:
@@ -261,9 +244,6 @@ def detect_invisible_watermark(
     methods: Optional[List[str]] = None,
     watermark_length: int = 48
 ) -> Dict[str, Any]:
-    """
-    Proba zdekodowania ukrytego znaku wodnego z pojedynczej klatki.
-    """
     result = {"found": False, "method": "invisible_watermark",
               "bits": "", "matched": None, "score": 0.0, "details": ""}
 
@@ -304,11 +284,9 @@ def detect_invisible_watermark(
 
             ones_ratio = bits_str.count('1') / max(len(bits_str), 1)
             is_nontrivial = 0.15 < ones_ratio < 0.85
-
             max_run = max(
                 (sum(1 for _ in g) for _, g in
-                 __import__('itertools').groupby(bits_str)),
-                default=0
+                 __import__('itertools').groupby(bits_str)), default=0
             )
             has_structure = max_run < len(bits_str) * 0.6
 
@@ -332,7 +310,7 @@ def detect_invisible_watermark(
 
 
 # ---------------------------------------------------------------------------
-# 3. NOISE RESIDUAL + FFT – artefakty upsamplingu AI
+# 3. NOISE RESIDUAL + FFT
 # ---------------------------------------------------------------------------
 
 def detect_ai_noise_artifacts(
@@ -340,13 +318,6 @@ def detect_ai_noise_artifacts(
     fft_peak_threshold: float = 0.35,
     wiener_ksize: int = 5
 ) -> Dict[str, Any]:
-    """
-    Wykrywa periodyczne artefakty upsamplingu przez FFT na residual noise.
-
-    POPRAWKA: cv2.circle wymaga macierzy uint8 (C-contiguous). Wczesniej
-    magnitude_no_center bylo float64 co powodowalo blad 'Layout incompatible'.
-    Teraz maska jest rysowana na osobnej tablicy uint8.
-    """
     result = {"found": False, "method": "noise_residual_fft",
               "score": 0.0, "details": "", "fft_image": None}
 
@@ -356,17 +327,15 @@ def detect_ai_noise_artifacts(
 
     fft = np.fft.fft2(noise)
     fft_shifted = np.fft.fftshift(fft)
-    magnitude = np.log1p(np.abs(fft_shifted))   # float64
+    magnitude = np.log1p(np.abs(fft_shifted))
 
     h, w = magnitude.shape
     cy, cx = h // 2, w // 2
     r = min(h, w) // 8
 
-    # Maska rysowana na uint8, konwertowana do float64 do mnozenia
     mask_u8 = np.ones((h, w), dtype=np.uint8)
     cv2.circle(mask_u8, (cx, cy), r, 0, -1)
     mask = mask_u8.astype(np.float64)
-
     magnitude_no_center = magnitude * mask
 
     nonzero = magnitude_no_center[magnitude_no_center > 0]
@@ -377,8 +346,7 @@ def detect_ai_noise_artifacts(
     vis = cv2.normalize(
         magnitude_no_center.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX
     ).astype(np.uint8)
-    vis_color = cv2.applyColorMap(vis, cv2.COLORMAP_INFERNO)
-    result["fft_image"] = vis_color
+    result["fft_image"] = cv2.applyColorMap(vis, cv2.COLORMAP_INFERNO)
 
     if ratio > fft_peak_threshold * 10:
         result["found"] = True
@@ -394,7 +362,7 @@ def detect_ai_noise_artifacts(
 
 
 # ---------------------------------------------------------------------------
-# 4. FASADA: skan zaawansowany dla jednego pliku wideo
+# 4. FASADA
 # ---------------------------------------------------------------------------
 
 def run_advanced_scan(
@@ -407,12 +375,6 @@ def run_advanced_scan(
     check_optical_flow: bool = True,
     log_fn=None
 ) -> Dict[str, Any]:
-    """
-    Zbiera klatki z otwartego VideoCapture i uruchamia wszystkie zaawansowane metody.
-
-    Nowy klucz w wyniku:
-      optical_flow_rois : list  –  wynik detect_optical_flow_overlay()
-    """
     def _log(msg):
         print(msg, file=sys.stderr)
         if log_fn:
@@ -448,7 +410,6 @@ def run_advanced_scan(
 
     _log(f"[ADV] Zebrano {len(frames)} klatek. Licze mediane temporalna...")
 
-    # 1. Temporal median
     try:
         median_frame = build_temporal_median(frames)
         result["temporal_median_frame"] = median_frame
@@ -458,31 +419,27 @@ def run_advanced_scan(
     except Exception as e:
         _log(f"[ADV] Blad mediany temporalnej: {e}")
 
-    # 2. Zero variance ROIs
     try:
         zv_rois = detect_zero_variance_rois(frames)
         result["zero_variance_rois"] = zv_rois
         if zv_rois:
-            names = [r['name'] for r in zv_rois]
-            _log(f"[ADV] Zerowa wariancja ROI: {names} – mozliwy statyczny overlay")
+            _log(f"[ADV] Zerowa wariancja ROI: {[r['name'] for r in zv_rois]}")
     except Exception as e:
         _log(f"[ADV] Blad zero-variance: {e}")
 
-    # 3. Optical Flow overlay
     if check_optical_flow and len(frames) >= 3:
-        _log("[ADV] Sprawdzam Optical Flow (Farneback) dla statycznych overlayow...")
+        _log("[ADV] Sprawdzam Optical Flow (Farneback + contour search)...")
         try:
             of_rois = detect_optical_flow_overlay(frames)
             result["optical_flow_rois"] = of_rois
             if of_rois:
-                names = [r['name'] for r in of_rois]
-                _log(f"[ADV] Optical Flow – statyczne ROI pomimo ruchu kamery: {names}")
+                _log(f"[ADV] OF – znaleziono {len(of_rois)} konturow statycznych: "
+                     f"{[r['name'] for r in of_rois[:5]]}")
             else:
-                _log("[ADV] Optical Flow: brak statycznych ROI / kamera statyczna")
+                _log("[ADV] OF: brak statycznych konturow / kamera statyczna")
         except Exception as e:
             _log(f"[ADV] Blad Optical Flow: {e}")
 
-    # 4. Invisible watermark
     if check_invisible and result["temporal_median_frame"] is not None:
         _log("[ADV] Sprawdzam invisible watermark (imwatermark)...")
         try:
@@ -495,7 +452,6 @@ def run_advanced_scan(
         except Exception as e:
             _log(f"[ADV] Blad invisible WM: {e}")
 
-    # 5. FFT noise
     if check_fft:
         _log("[ADV] Sprawdzam artefakty FFT noise...")
         try:
@@ -508,12 +464,11 @@ def run_advanced_scan(
         except Exception as e:
             _log(f"[ADV] Blad FFT: {e}")
 
-    # Podsumowanie
     findings = []
     if result["zero_variance_rois"]:
         findings.append(f"statyczny_overlay({len(result['zero_variance_rois'])} ROI)")
     if result["optical_flow_rois"]:
-        findings.append(f"optical_flow_overlay({len(result['optical_flow_rois'])} ROI)")
+        findings.append(f"optical_flow_overlay({len(result['optical_flow_rois'])} konturow)")
     if result["invisible_wm"].get("found"):
         findings.append(f"invisible_wm({result['invisible_wm'].get('matched', 'nieznany')})")
     if result["fft_artifacts"].get("found"):
