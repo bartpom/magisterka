@@ -3,11 +3,15 @@
 evaluate.py
 Benchmark detektora AI-wideo.
 
-Zapisuje trzy pliki wynikowe:
-  raw_signals.csv        — surowe wartości każdego detektora (do strojenia progów)
+Zapisuje wyniki do kod/results/<YYYY-MM-DD_<hash>/ (snapshot) oraz do
+kod/results/latest/ (symlink / kopia dla szybkiego dostępu).
+
+Pliki wynikowe:
+  raw_signals.csv        — surowe wartości każdego detektora
   evaluation_results.csv — decyzja finalna per wideo
-  metrics_summary.csv    — TP/TN/FP/FN + Accuracy/F1/FPR per kategoria
-  threshold_sweep.csv    — sweep progów invisible_wm i optical_flow
+  metrics_summary.csv    — TP/TN/FP/FN + Accuracy/F1/FPR/specificity per kategoria
+  threshold_sweep.csv    — sweep 175+ kombinacji progów
+  run_info.txt           — hash commita, data, liczba filmów
 
 Kategorie:
   ai_baseline    (filmy AI z watermarkiem)        → gt=1
@@ -18,23 +22,22 @@ Kategorie:
 
 from __future__ import annotations
 import csv
+import shutil
+import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+import itertools
 import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from advanced_detectors import run_advanced_scan
 
 DATASET_ROOT = Path(__file__).parent
-RESULTS_DIR  = DATASET_ROOT.parent / "results"
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
-RAW_CSV      = RESULTS_DIR / "raw_signals.csv"
-EVAL_CSV     = RESULTS_DIR / "evaluation_results.csv"
-METRICS_CSV  = RESULTS_DIR / "metrics_summary.csv"
-SWEEP_CSV    = RESULTS_DIR / "threshold_sweep.csv"
+RESULTS_BASE = DATASET_ROOT.parent / "results"
+RESULTS_BASE.mkdir(parents=True, exist_ok=True)
 
 CATEGORIES = {
     "ai_baseline":    (DATASET_ROOT / "ai_baseline",    1),
@@ -43,31 +46,13 @@ CATEGORIES = {
     "adv_fp_trap":    (DATASET_ROOT / "adv_fp_trap",    0),
 }
 
-# ————————————————————————————————————————————————————————————————————————
-# Definicja kolumn CSV
-# ————————————————————————————————————————————————————————————————————————
-
 RAW_FIELDS = [
     "category", "filename", "ground_truth",
-    # Zero-variance
-    "zv_count",           # liczba ROI z zerową wariancją
-    "zv_max_score",       # max score (frakcja pikseli < thr) wśród ROI
-    # Optical Flow
-    "of_count",           # liczba konturów statycznych
-    "of_max_area",        # pole największego konturu
-    "of_global_motion",   # średni globalny ruch kamery (px)
-    # Invisible Watermark
-    "iw_found",           # 1/0 — czy cokolwiek dopasowano
-    "iw_best_similarity", # best_similarity do znanych sygnatur [0.0–1.0]
-    "iw_matched",         # nazwa dopasowanej sygnatury lub pusty string
-    "iw_method",          # metoda: dwtDct / dwtDctSvd / rivaGan
-    # FFT
-    "fft_found",          # 1/0
-    "fft_score",          # score z FFT [0.0–1.0]
-    # Czas
-    "frames_sampled",
-    "duration_s",
-    "detector_version",
+    "zv_count", "zv_max_score",
+    "of_count", "of_max_area", "of_global_motion",
+    "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
+    "fft_found", "fft_score",
+    "frames_sampled", "duration_s", "detector_version",
 ]
 
 EVAL_FIELDS = [
@@ -80,9 +65,42 @@ EVAL_FIELDS = [
 DETECTOR_VERSION = "adv_v2_sweep"
 
 
-# ————————————————————————————————————————————————————————————————————————
-# Fuzja sygnałów — domyślne progi (kalibrowane przez threshold_sweep)
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
+# Snapshot katalogu wynikow
+# ───────────────────────────────────────────────────────────────────────
+
+def get_git_hash() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(DATASET_ROOT),
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+
+def make_snapshot_dir() -> Path:
+    """Tworzy unikalny katalog wynikow results/YYYY-MM-DD_<hash>/."""
+    date_str  = datetime.now().strftime("%Y-%m-%d")
+    git_hash  = get_git_hash()
+    snap_name = f"{date_str}_{git_hash}"
+    snap_dir  = RESULTS_BASE / snap_name
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    return snap_dir
+
+
+def copy_to_latest(snap_dir: Path) -> None:
+    """Kopiuje snapshot do results/latest/ (nadpisuje)."""
+    latest = RESULTS_BASE / "latest"
+    if latest.exists():
+        shutil.rmtree(latest)
+    shutil.copytree(snap_dir, latest)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Fuzja sygnalow
+# ───────────────────────────────────────────────────────────────────────
 
 def fuse(
     zv_count: int,
@@ -91,32 +109,27 @@ def fuse(
     iw_matched: str,
     fft_score: float,
     c2pa_found: bool = False,
-    # Progi sygnałów mocnych
     iw_strong_threshold: float = 0.85,
-    # Progi sygnałów słabych (heurystycznych)
     of_threshold: int = 6,
     iw_weak_threshold: float = 0.65,
     zv_threshold: int = 2,
     fft_threshold: float = 0.30,
-    # Próg score ważonego + minimalna liczba głosów
     score_threshold: float = 0.62,
     min_weak_votes: int = 2,
 ) -> tuple[int, float, str]:
     """
-    Fuzja sygnałów — zwraca (detected: 0/1, fusion_score: float, mode: str).
+    Fuzja sygnalow — zwraca (detected: 0/1, fusion_score: float, mode: str).
 
     Logika dwustopniowa:
-    1. Sygnały wysokiej precyzji: C2PA lub silny invisible WM -> natychmiastowa detekcja.
-    2. Sygnały heurystyczne: wymagana zgodność ≥ min_weak_votes i score ≥ score_threshold.
+    1. Sygnaly wysokiej precyzji: C2PA lub silny invisible WM.
+    2. Score wazony + glosowanie heurystyk.
     """
-    # --- STOPIEŃ 1: sygnały wysokiej precyzji ---
     if c2pa_found:
         return 1, 1.0, "c2pa"
     if iw_matched and iw_similarity >= iw_strong_threshold:
         return 1, iw_similarity, f"iw_strong:{iw_matched}"
 
-    # --- STOPIEŃ 2: score ważony + głosowanie ---
-    iw_norm = min(1.0, iw_similarity)  # już w [0,1]
+    iw_norm = min(1.0, iw_similarity)
     of_norm = min(1.0, of_count / max(of_threshold, 1))
     zv_norm = min(1.0, zv_count / max(zv_threshold, 1))
 
@@ -139,14 +152,14 @@ def fuse(
     return 0, round(score, 4), f"below_thr:votes={votes}"
 
 
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
 # Skanowanie wideo
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
 
 def scan_video(video_path: Path) -> tuple[dict[str, Any], float]:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
-        raise RuntimeError(f"Nie można otworzyć: {video_path}")
+        raise RuntimeError(f"Nie mozna otworzyc: {video_path}")
     fps          = cap.get(cv2.CAP_PROP_FPS) or 25.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     t0 = time.time()
@@ -164,21 +177,18 @@ def scan_video(video_path: Path) -> tuple[dict[str, Any], float]:
 
 
 def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
-    """Wyciąga i normalizuje surowe sygnały z wyniku run_advanced_scan."""
-    zv_rois = result.get("zero_variance_rois", [])
-    of_rois = result.get("optical_flow_rois", [])
-    iw_data = result.get("invisible_wm", {})
-    fft_data = result.get("fft_artifacts", {})
+    zv_rois  = result.get("zero_variance_rois", [])
+    of_rois  = result.get("optical_flow_rois",  [])
+    iw_data  = result.get("invisible_wm",       {})
+    fft_data = result.get("fft_artifacts",      {})
 
-    zv_count    = len(zv_rois)
+    zv_count     = len(zv_rois)
     zv_max_score = max((r.get("score", 0.0) for r in zv_rois), default=0.0)
+    of_count     = len(of_rois)
+    of_max_area  = max((r.get("area",  0)   for r in of_rois), default=0)
+    of_global    = of_rois[0].get("global_motion", 0.0) if of_rois else 0.0
 
-    of_count    = len(of_rois)
-    of_max_area = max((r.get("area", 0) for r in of_rois), default=0)
-    of_global   = of_rois[0].get("global_motion", 0.0) if of_rois else 0.0
-
-    # Kluczowa zmiana: best_similarity zamiast stałego 0.5
-    iw_similarity = float(iw_data.get("score", 0.0))
+    iw_similarity = float(iw_data.get("score",   0.0))
     iw_matched    = iw_data.get("matched") or ""
     iw_found      = 1 if iw_data.get("found", False) else 0
     iw_method     = iw_data.get("method", "")
@@ -187,23 +197,23 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
     fft_score = float(fft_data.get("score", 0.0))
 
     return {
-        "zv_count":          zv_count,
-        "zv_max_score":      round(zv_max_score, 4),
-        "of_count":          of_count,
-        "of_max_area":       of_max_area,
-        "of_global_motion":  round(of_global, 4),
-        "iw_found":          iw_found,
+        "zv_count":           zv_count,
+        "zv_max_score":       round(zv_max_score,  4),
+        "of_count":           of_count,
+        "of_max_area":        of_max_area,
+        "of_global_motion":   round(of_global,     4),
+        "iw_found":           iw_found,
         "iw_best_similarity": round(iw_similarity, 4),
-        "iw_matched":        iw_matched,
-        "iw_method":         iw_method,
-        "fft_found":         fft_found,
-        "fft_score":         round(fft_score, 4),
+        "iw_matched":         iw_matched,
+        "iw_method":          iw_method,
+        "fft_found":          fft_found,
+        "fft_score":          round(fft_score,     4),
     }
 
 
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
 # Metryki
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
 
 def compute_metrics(rows: list[dict], pred_field: str = "detected") -> list[dict]:
     cats: dict[str, list] = {}
@@ -219,11 +229,11 @@ def compute_metrics(rows: list[dict], pred_field: str = "detected") -> list[dict
         fn = sum(p == 0 and g == 1 for p, g in zip(pred, gt))
         n  = len(gt)
         acc  = (tp + tn) / n if n else 0
-        prec = tp / (tp + fp) if (tp + fp) else 0
-        rec  = tp / (tp + fn) if (tp + fn) else 0
+        prec = tp / (tp + fp)   if (tp + fp) else 0
+        rec  = tp / (tp + fn)   if (tp + fn) else 0
         f1   = 2 * prec * rec / (prec + rec) if (prec + rec) else 0
-        fpr  = fp / (fp + tn) if (fp + tn) else 0
-        spec = tn / (tn + fp) if (tn + fp) else 0
+        fpr  = fp / (fp + tn)   if (fp + tn) else 0
+        spec = tn / (tn + fp)   if (tn + fp) else 0
         metric_rows.append({
             "category": cat, "n": n,
             "TP": tp, "TN": tn, "FP": fp, "FN": fn,
@@ -237,42 +247,60 @@ def compute_metrics(rows: list[dict], pred_field: str = "detected") -> list[dict
     return metric_rows
 
 
-# ————————————————————————————————————————————————————————————————————————
-# Threshold sweep
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
+# Threshold sweep (rozszerzony o iw_strong)
+# ───────────────────────────────────────────────────────────────────────
 
 def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
     """
-    Sweep progów iw_similarity i of_count bez ponownego przetwarzania wideo.
-    Dla każdej kombinacji (iw_thr, of_thr, score_thr) oblicza globalne metryki.
-    """
-    import itertools
+    Sweep bez ponownego przetwarzania wideo.
+    Rozszerzony o iw_strong_threshold — kluczowe, gdy stage 1 robi FP.
 
-    iw_thresholds  = [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
-    of_thresholds  = [3, 5, 8, 10, 15]
-    score_thresholds = [0.55, 0.60, 0.62, 0.65, 0.70]
+    Kombinacje: 4 x iw_strong * 5 x iw_weak * 5 x of * 4 x score = 400 wierszy
+    """
+    # Progi stage 1 (silny IW)
+    iw_strong_thresholds = [0.75, 0.80, 0.85, 0.90]
+    # Progi stage 2
+    iw_weak_thresholds   = [0.55, 0.60, 0.65, 0.70, 0.75]
+    of_thresholds        = [3, 5, 8, 10, 15]
+    score_thresholds     = [0.55, 0.60, 0.62, 0.65]
 
     sweep_rows = []
-    for iw_thr, of_thr, sc_thr in itertools.product(
-        iw_thresholds, of_thresholds, score_thresholds
+    for iw_strong, iw_weak, of_thr, sc_thr in itertools.product(
+        iw_strong_thresholds, iw_weak_thresholds,
+        of_thresholds, score_thresholds
     ):
+        # iw_weak nie moze byc wyzszy niz iw_strong
+        if iw_weak >= iw_strong:
+            continue
+
         preds, gts = [], []
+        # Zliczaj FP per split osobno (potrzebne do wyboru konfiguracji wg TPR/FPR per-split)
+        split_tp:  dict[str, int] = {}
+        split_fp:  dict[str, int] = {}
+        split_tn:  dict[str, int] = {}
+        split_fn:  dict[str, int] = {}
         for r in raw_rows:
             gt_val = int(r["ground_truth"])
+            cat    = r["category"]
             det, _, _ = fuse(
-                zv_count=int(r["zv_count"]),
-                of_count=int(r["of_count"]),
-                iw_similarity=float(r["iw_best_similarity"]),
-                iw_matched=r["iw_matched"],
-                fft_score=float(r["fft_score"]),
-                iw_strong_threshold=0.85,
-                of_threshold=of_thr,
-                iw_weak_threshold=iw_thr,
-                score_threshold=sc_thr,
-                min_weak_votes=2,
+                zv_count      = int(r["zv_count"]),
+                of_count      = int(r["of_count"]),
+                iw_similarity = float(r["iw_best_similarity"]),
+                iw_matched    = r["iw_matched"],
+                fft_score     = float(r["fft_score"]),
+                iw_strong_threshold = iw_strong,
+                of_threshold        = of_thr,
+                iw_weak_threshold   = iw_weak,
+                score_threshold     = sc_thr,
+                min_weak_votes      = 2,
             )
             preds.append(det)
             gts.append(gt_val)
+            if det == 1 and gt_val == 1: split_tp[cat] = split_tp.get(cat, 0) + 1
+            if det == 1 and gt_val == 0: split_fp[cat] = split_fp.get(cat, 0) + 1
+            if det == 0 and gt_val == 0: split_tn[cat] = split_tn.get(cat, 0) + 1
+            if det == 0 and gt_val == 1: split_fn[cat] = split_fn.get(cat, 0) + 1
 
         tp = sum(p == 1 and g == 1 for p, g in zip(preds, gts))
         tn = sum(p == 0 and g == 0 for p, g in zip(preds, gts))
@@ -280,125 +308,151 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
         fn = sum(p == 0 and g == 1 for p, g in zip(preds, gts))
         n  = len(gts)
         acc  = (tp + tn) / n if n else 0
-        prec = tp / (tp + fp) if (tp + fp) else 0
-        rec  = tp / (tp + fn) if (tp + fn) else 0
+        prec = tp / (tp + fp)   if (tp + fp) else 0
+        rec  = tp / (tp + fn)   if (tp + fn) else 0
         f1   = 2 * prec * rec / (prec + rec) if (prec + rec) else 0
-        fpr  = fp / (fp + tn) if (fp + tn) else 0
+        fpr  = fp / (fp + tn)   if (fp + tn) else 0
+
+        # TPR per split (klucz: TPR_aibaseline, FPR_adv_fp_trap)
+        def _tpr(cat: str) -> str:
+            tp_c = split_tp.get(cat, 0)
+            fn_c = split_fn.get(cat, 0)
+            return f"{tp_c / (tp_c + fn_c):.4f}" if (tp_c + fn_c) > 0 else "N/A"
+
+        def _fpr_split(cat: str) -> str:
+            fp_c = split_fp.get(cat, 0)
+            tn_c = split_tn.get(cat, 0)
+            return f"{fp_c / (fp_c + tn_c):.4f}" if (fp_c + tn_c) > 0 else "N/A"
 
         sweep_rows.append({
-            "iw_weak_thr":    iw_thr,
-            "of_thr":         of_thr,
-            "score_thr":      sc_thr,
+            "iw_strong_thr":         iw_strong,
+            "iw_weak_thr":           iw_weak,
+            "of_thr":                of_thr,
+            "score_thr":             sc_thr,
             "TP": tp, "TN": tn, "FP": fp, "FN": fn,
-            "accuracy":  f"{acc:.4f}",
-            "precision": f"{prec:.4f}",
-            "recall":    f"{rec:.4f}",
-            "f1":        f"{f1:.4f}",
-            "FPR":       f"{fpr:.4f}",
+            "accuracy":              f"{acc:.4f}",
+            "precision":             f"{prec:.4f}",
+            "recall":                f"{rec:.4f}",
+            "f1":                    f"{f1:.4f}",
+            "FPR_global":            f"{fpr:.4f}",
+            "TPR_aibaseline":        _tpr("ai_baseline"),
+            "FPR_adv_fp_trap":       _fpr_split("adv_fp_trap"),
+            "TPR_adv_compressed":    _tpr("adv_compressed"),
+            "TPR_adv_cropped":       _tpr("adv_cropped"),
         })
 
-    # Sortuj po FPR ASC, potem F1 DESC
-    sweep_rows.sort(key=lambda x: (float(x["FPR"]), -float(x["f1"])))
+    # Sortuj: najpierw FPR_adv_fp_trap ASC, potem TPR_aibaseline DESC
+    def _sort_key(x: dict):
+        fpr_fp = float(x["FPR_adv_fp_trap"]) if x["FPR_adv_fp_trap"] != "N/A" else 1.0
+        tpr_ai = float(x["TPR_aibaseline"])  if x["TPR_aibaseline"]  != "N/A" else 0.0
+        return (fpr_fp, -tpr_ai)
+
+    sweep_rows.sort(key=_sort_key)
     return sweep_rows
 
 
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
 # Main
-# ————————————————————————————————————————————————————————————————————————
+# ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    # Czyść stare wyniki
-    for f in [RAW_CSV, EVAL_CSV, METRICS_CSV, SWEEP_CSV]:
-        if f.exists():
-            print(f"[INFO] Usuwam: {f}")
-            f.unlink()
+    snap_dir  = make_snapshot_dir()
+    git_hash  = get_git_hash()
+    run_time  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[SNAP]  Snapshot: {snap_dir}")
+    print(f"[SNAP]  Commit:   {git_hash}")
 
     raw_rows:  list[dict] = []
     eval_rows: list[dict] = []
+    total_videos = 0
 
     for category, (folder, gt) in CATEGORIES.items():
         videos = sorted(folder.glob("*.mp4"))
         if not videos:
             print(f"[WARN] Brak .mp4 w {folder}", file=sys.stderr)
             continue
-        print(f"\n=== {category} ({len(videos)} filmów) ===")
+        print(f"\n=== {category} ({len(videos)} filmow) ===")
+        total_videos += len(videos)
 
         for vp in videos:
             print(f"  [SCAN] {vp.name} ... ", end="", flush=True)
             try:
                 result, elapsed = scan_video(vp)
                 sig = extract_signals(result)
-                frames_sampled = len(result.get("zero_variance_rois", []).__class__.__mro__) or 30
 
-                # Surowy wiersz
                 raw_row = {
-                    "category":      category,
-                    "filename":      vp.name,
-                    "ground_truth":  gt,
+                    "category":         category,
+                    "filename":         vp.name,
+                    "ground_truth":     gt,
                     **sig,
-                    "frames_sampled":  30,
-                    "duration_s":      f"{elapsed:.2f}",
+                    "frames_sampled":   30,
+                    "duration_s":       f"{elapsed:.2f}",
                     "detector_version": DETECTOR_VERSION,
                 }
                 raw_rows.append(raw_row)
 
-                # Decyzja fuzji z domyślnymi progami
                 det, score, mode = fuse(
-                    zv_count=sig["zv_count"],
-                    of_count=sig["of_count"],
-                    iw_similarity=sig["iw_best_similarity"],
-                    iw_matched=sig["iw_matched"],
-                    fft_score=sig["fft_score"],
+                    zv_count      = sig["zv_count"],
+                    of_count      = sig["of_count"],
+                    iw_similarity = sig["iw_best_similarity"],
+                    iw_matched    = sig["iw_matched"],
+                    fft_score     = sig["fft_score"],
                 )
 
                 eval_row = {
-                    "category":          category,
-                    "filename":          vp.name,
-                    "ground_truth":      gt,
-                    "detected":          det,
-                    "fusion_score":      score,
-                    "fusion_mode":       mode,
-                    "zv_count":          sig["zv_count"],
-                    "of_count":          sig["of_count"],
+                    "category":           category,
+                    "filename":           vp.name,
+                    "ground_truth":       gt,
+                    "detected":           det,
+                    "fusion_score":       score,
+                    "fusion_mode":        mode,
+                    "zv_count":           sig["zv_count"],
+                    "of_count":           sig["of_count"],
                     "iw_best_similarity": sig["iw_best_similarity"],
-                    "iw_matched":        sig["iw_matched"],
-                    "fft_score":         sig["fft_score"],
-                    "duration_s":        f"{elapsed:.2f}",
+                    "iw_matched":         sig["iw_matched"],
+                    "fft_score":          sig["fft_score"],
+                    "duration_s":         f"{elapsed:.2f}",
                 }
                 eval_rows.append(eval_row)
 
                 det_str = "WYKRYTO" if det else "brak"
-                print(f"{det_str}  score={score:.3f}  ({elapsed:.1f}s)")
+                print(f"{det_str}  score={score:.3f}  mode={mode}  ({elapsed:.1f}s)")
 
             except Exception as e:
-                print(f"BŁĄD: {e}", file=sys.stderr)
+                print(f"BLAD: {e}", file=sys.stderr)
 
-    # --- Zapis raw_signals.csv ---
+    # —— Zapis plikow wynikowych ——
+    def _write_csv(path: Path, fields: list[str], rows: list[dict]) -> None:
+        with path.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+
     if raw_rows:
-        with RAW_CSV.open("w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=RAW_FIELDS)
-            writer.writeheader()
-            writer.writerows(raw_rows)
-        print(f"\n[RAW]     {RAW_CSV}")
-
-    # --- Zapis evaluation_results.csv ---
+        _write_csv(snap_dir / "raw_signals.csv",        RAW_FIELDS,  raw_rows)
     if eval_rows:
-        with EVAL_CSV.open("w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=EVAL_FIELDS)
-            writer.writeheader()
-            writer.writerows(eval_rows)
-        print(f"[EVAL]    {EVAL_CSV}")
+        _write_csv(snap_dir / "evaluation_results.csv", EVAL_FIELDS, eval_rows)
 
-    # --- Metryki ---
+    metrics: list[dict] = []
     if eval_rows:
         metrics = compute_metrics(eval_rows)
-        with METRICS_CSV.open("w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(metrics[0].keys()))
-            writer.writeheader()
-            writer.writerows(metrics)
-        print(f"[METRICS] {METRICS_CSV}")
+        _write_csv(snap_dir / "metrics_summary.csv", list(metrics[0].keys()), metrics)
 
-        print("\n--- Podsumowanie metryk (domyślne progi) ---")
+    # —— run_info.txt ——
+    with (snap_dir / "run_info.txt").open("w", encoding="utf-8") as f:
+        f.write(f"commit:       {git_hash}\n")
+        f.write(f"run_time:     {run_time}\n")
+        f.write(f"total_videos: {total_videos}\n")
+        f.write(f"categories:   {list(CATEGORIES.keys())}\n")
+        f.write(f"detector_ver: {DETECTOR_VERSION}\n")
+
+    print(f"\n[RAW]     {snap_dir / 'raw_signals.csv'}")
+    print(f"[EVAL]    {snap_dir / 'evaluation_results.csv'}")
+    print(f"[METRICS] {snap_dir / 'metrics_summary.csv'}")
+    print(f"[INFO]    {snap_dir / 'run_info.txt'}")
+
+    if metrics:
+        print("\n--- Podsumowanie metryk (domyslne progi) ---")
         for m in metrics:
             print(
                 f"  {m['category']:18s}: n={m['n']:3d} "
@@ -407,24 +461,29 @@ def main() -> None:
                 f"TP={m['TP']} FP={m['FP']} TN={m['TN']} FN={m['FN']}"
             )
 
-    # --- Threshold sweep (na surowych sygnałach, bez ponownego skanowania) ---
+    # —— Threshold sweep (na surowych sygnałach) ——
     if raw_rows:
-        print("\n[SWEEP] Obliczam threshold sweep...")
+        print("\n[SWEEP] Obliczam threshold sweep (rozszerzony o iw_strong)...")
         sweep = run_threshold_sweep(raw_rows)
-        with SWEEP_CSV.open("w", encoding="utf-8", newline="") as f:
+        sweep_path = snap_dir / "threshold_sweep.csv"
+        with sweep_path.open("w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=list(sweep[0].keys()))
             writer.writeheader()
             writer.writerows(sweep)
-        print(f"[SWEEP]   {SWEEP_CSV}")
+        print(f"[SWEEP]   {sweep_path}  ({len(sweep)} kombinacji)")
 
-        # Pokaż top-5 konfiguracji z najniższym FPR
-        print("\n--- Top-5 konfiguracji (najniższy FPR) ---")
+        print("\n--- Top-5 konfiguracji (FPR_adv_fp_trap ASC, TPR_aibaseline DESC) ---")
         for row in sweep[:5]:
             print(
-                f"  iw_thr={row['iw_weak_thr']}  of_thr={row['of_thr']}  "
-                f"sc_thr={row['score_thr']}  "
-                f"FPR={row['FPR']}  F1={row['f1']}  acc={row['accuracy']}"
+                f"  iw_strong={row['iw_strong_thr']}  iw_weak={row['iw_weak_thr']}  "
+                f"of={row['of_thr']}  sc={row['score_thr']}  "
+                f"FPR_fptrap={row['FPR_adv_fp_trap']}  "
+                f"TPR_ai={row['TPR_aibaseline']}  F1={row['f1']}"
             )
+
+    # —— Kopiuj do latest/ ——
+    copy_to_latest(snap_dir)
+    print(f"\n[LATEST] {RESULTS_BASE / 'latest'}")
 
 
 if __name__ == "__main__":
