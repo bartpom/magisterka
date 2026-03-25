@@ -1,0 +1,33 @@
+# Core
+numpy
+opencv-python
+Pillow
+pandas
+scikit-learn
+tqdm
+
+# Deep learning
+torch
+torchvision
+
+# OCR
+easyocr
+pytesseract
+
+# YOLO
+ultralytics
+
+# Invisible watermark
+invisible-watermark
+
+# Video download
+yt-dlp
+
+# GUI
+PyQt6
+
+# Video processing
+ffmpeg-python
+
+# C2PA (opcjonalne — wymaga rustup/cargo przy instalacji ze źródeł)
+# c2pa-python

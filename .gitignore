@@ -31,10 +31,10 @@ runs/
 _calibration_thresholds.json
 *.log
 
-# Nagrania i wirtualne srodowiska lokalne
+# Nagrania i lokalne foldery
 nagrania/
 
-# Archiwa i duze pliki binarne
+# Archiwa i duże pliki binarne
 *.rar
 *.zip
 *.mp4
@@ -49,8 +49,9 @@ kod/weights/
 
 # Deepfake detection challenge
 kod/deepfake-detection-challenge/
+kod/FreqNet-DeepfakeDetection/
 
-# Wyniki dzialania, raporty i klatki
+# Wyniki działania, raporty i klatki
 kod/results/
 kod/reports/
 kod/ai_reports/
@@ -58,9 +59,11 @@ ai_reports/
 kod/suspicious_frames/
 debug_test/
 aplikacje www.txt
-kod/FreqNet-DeepfakeDetection/
 
-# Dataset - ignoruj foldery z wideo, ale zachowaj kod i manifesty
+# Dataset — ignoruj foldery z wideo, zachowaj kod i manifesty
 kod/dataset/*
 !kod/dataset/*.py
 !kod/dataset/*.csv
+
+# PyCharm IDE artifacts (nie powinny trafiać do repo)
+PyCharmMiscProject.iml
