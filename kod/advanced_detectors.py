@@ -123,6 +123,7 @@ def detect_optical_flow_overlay(
     min_contour_area: int = 40,
     morph_kernel_size: int = 5,
     of_scale: float = 0.5,
+    low_texture_threshold: float = 50.0,
     use_cuda: Optional[bool] = None
 ) -> List[Dict[str, Any]]:
     """
@@ -208,6 +209,7 @@ def detect_optical_flow_overlay(
         return gray
 
     prev_gray = _resize_gray(sampled[0])
+    texture_frame_gray = cv2.cvtColor(sampled[len(sampled) // 2], cv2.COLOR_BGR2GRAY)
 
     for curr_frame in sampled[1:]:
         curr_gray = _resize_gray(curr_frame)
@@ -277,6 +279,8 @@ def detect_optical_flow_overlay(
 
         roi_mask = static_mask[by:by + bh_cnt, bx:bx + bw_cnt]
         score = float(np.mean(roi_mask > 0)) if roi_mask.size > 0 else 0.0
+        roi_texture = texture_frame_gray[by:by + bh_cnt, bx:bx + bw_cnt]
+        texture_variance = float(np.var(roi_texture)) if roi_texture.size > 0 else 0.0
 
         cx_rel = (bx + bw_cnt / 2) / w_orig
         cy_rel = (by + bh_cnt / 2) / h_orig
@@ -286,9 +290,16 @@ def detect_optical_flow_overlay(
         results.append({
             "name": f"OF-{pos_v}{pos_h}-{i}",
             "bbox": (bx, by, bx + bw_cnt, by + bh_cnt),
+            "width_ratio": float(bw_cnt) / float(max(w_orig, 1)),
+            "height_ratio": float(bh_cnt) / float(max(h_orig, 1)),
+            "cx_rel": cx_rel,
+            "cy_rel": cy_rel,
             "score": score,
             "area": area,
-            "global_motion": global_mean_motion
+            "area_ratio": float(area) / float(max(w_orig * h_orig, 1)),
+            "global_motion": global_mean_motion,
+            "texture_variance": texture_variance,
+            "is_low_texture": bool(texture_variance < low_texture_threshold),
         })
 
     results.sort(key=lambda x: x["area"], reverse=True)
@@ -359,17 +370,20 @@ def detect_invisible_watermark(
 
     for method in methods:
         try:
-            decoder = WatermarkDecoder('bits', watermark_length)
+            method_bits = 32 if method == "rivaGan" else watermark_length
+            decoder = WatermarkDecoder('bits', method_bits)
             watermark_bits = decoder.decode(bgr, method)
             bits_str = ''.join(str(int(b)) for b in watermark_bits)
 
             matched = None
             best_similarity = 0.0
             for sig_name, sig_bits in _KNOWN_SIGNATURES.items():
-                if len(sig_bits) <= len(bits_str):
-                    sub = bits_str[:len(sig_bits)]
-                    matches = sum(a == b for a, b in zip(sub, sig_bits))
-                    sim = matches / len(sig_bits)
+                cmp_len = min(len(sig_bits), len(bits_str))
+                if cmp_len >= 16:
+                    sub = bits_str[:cmp_len]
+                    ref = sig_bits[:cmp_len]
+                    matches = sum(a == b for a, b in zip(sub, ref))
+                    sim = matches / cmp_len
                     if sim > best_similarity:
                         best_similarity = sim
                         if sim >= 0.85:
@@ -396,6 +410,23 @@ def detect_invisible_watermark(
                 return result
 
         except Exception as e:
+            # Fallback dla starszych wersji rivaGan, które wspierają tylko 32-bit.
+            if method == "rivaGan" and "32 bits" in str(e):
+                try:
+                    decoder = WatermarkDecoder('bits', 32)
+                    watermark_bits = decoder.decode(bgr, method)
+                    bits_str = ''.join(str(int(b)) for b in watermark_bits)
+                    result["found"] = bool(bits_str)
+                    result["method"] = "invisible_watermark:rivaGan"
+                    result["bits"] = bits_str
+                    result["matched"] = None
+                    result["score"] = 0.5 if bits_str else 0.0
+                    result["details"] = "rivaGan fallback: decode 32-bit watermark"
+                    if bits_str:
+                        return result
+                except Exception as fallback_e:
+                    result["details"] = f"blad {method} fallback32: {fallback_e}"
+                    continue
             result["details"] = f"blad {method}: {e}"
             continue
 
@@ -406,13 +437,50 @@ def detect_invisible_watermark(
 # 3. NOISE RESIDUAL + FFT
 # ---------------------------------------------------------------------------
 
+def _compute_hf_ratio(frame_bgr: np.ndarray, cutoff_ratio: float = 0.30) -> float:
+    """
+    Oblicza high-frequency energy ratio:
+        hf_ratio = energy(f > cutoff_ratio * nyquist) / total_energy
+    """
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    fft = np.fft.fft2(gray)
+    fft_shifted = np.fft.fftshift(fft)
+    magnitude = np.abs(fft_shifted)
+
+    h, w = magnitude.shape
+    cy, cx = h // 2, w // 2
+    yy, xx = np.ogrid[:h, :w]
+    dist = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+    max_radius = 0.5 * min(h, w)
+    hf_mask = dist >= (cutoff_ratio * max_radius)
+
+    total_energy = float(np.sum(magnitude))
+    hf_energy = float(np.sum(magnitude[hf_mask])) if np.any(hf_mask) else 0.0
+    return hf_energy / (total_energy + 1e-6)
+
+
+def compute_freq_hf_ratio_mean(frames: List[np.ndarray], n_samples: int = 5) -> float:
+    """Liczy mean hf_ratio na N równomiernie próbkowanych klatkach."""
+    if not frames:
+        return 0.0
+    n = min(n_samples, len(frames))
+    idxs = np.linspace(0, len(frames) - 1, num=n, dtype=int)
+    ratios = []
+    for i in idxs:
+        try:
+            ratios.append(_compute_hf_ratio(frames[i]))
+        except Exception:
+            continue
+    return float(np.mean(ratios)) if ratios else 0.0
+
+
 def detect_ai_noise_artifacts(
     frame_bgr: np.ndarray,
     fft_peak_threshold: float = 0.35,
     wiener_ksize: int = 5
 ) -> Dict[str, Any]:
     result = {"found": False, "method": "noise_residual_fft",
-              "score": 0.0, "details": "", "fft_image": None}
+              "score": 0.0, "details": "", "fft_image": None, "freq_hf_ratio": 0.0}
 
     gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
     blurred = cv2.GaussianBlur(gray, (wiener_ksize, wiener_ksize), 0)
@@ -436,6 +504,10 @@ def detect_ai_noise_artifacts(
     max_peak = float(np.max(magnitude_no_center))
     ratio = max_peak / (mean_bg + 1e-6)
 
+    # High-frequency energy ratio dla biezacej klatki.
+    hf_ratio = _compute_hf_ratio(frame_bgr, cutoff_ratio=0.30)
+    result["freq_hf_ratio"] = hf_ratio
+
     vis = cv2.normalize(
         magnitude_no_center.astype(np.float32), None, 0, 255, cv2.NORM_MINMAX
     ).astype(np.uint8)
@@ -445,11 +517,11 @@ def detect_ai_noise_artifacts(
         result["found"] = True
         result["score"] = min(1.0, (ratio - fft_peak_threshold * 10) / 50.0)
         result["details"] = (
-            f"FFT peak ratio={ratio:.2f}, mean_bg={mean_bg:.3f}, "
+            f"FFT peak ratio={ratio:.2f}, hf_ratio={hf_ratio:.3f}, mean_bg={mean_bg:.3f}, "
             f"max_peak={max_peak:.3f} – mozliwe artefakty AI upsamplingu"
         )
     else:
-        result["details"] = f"FFT ratio={ratio:.2f} – brak anomalii"
+        result["details"] = f"FFT ratio={ratio:.2f}, hf_ratio={hf_ratio:.3f} – brak anomalii"
 
     return result
 
@@ -558,11 +630,13 @@ def run_advanced_scan(
         _log("[ADV] Sprawdzam artefakty FFT noise...")
         try:
             fft_res = detect_ai_noise_artifacts(frames[len(frames) // 2])
+            fft_res["freq_hf_ratio_mean"] = compute_freq_hf_ratio_mean(frames, n_samples=5)
             result["fft_artifacts"] = fft_res
             if fft_res["found"]:
                 _log(f"[ADV] FFT artefakty: {fft_res['details']}")
             else:
                 _log(f"[ADV] FFT: {fft_res['details']}")
+            _log(f"[ADV] FFT hf_ratio_mean={fft_res.get('freq_hf_ratio_mean', 0.0):.4f}")
         except Exception as e:
             _log(f"[ADV] Blad FFT: {e}")
 
