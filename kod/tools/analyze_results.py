@@ -107,6 +107,8 @@ def analyze_fp_stage(
                 fft_score     = float(r["fft_score"]),
                 of_texture_variance_mean = float(r.get("of_texture_variance_mean", 0.0)),
                 of_low_texture_roi_count = _int(r.get("of_low_texture_roi_count", 0)),
+                of_wide_lower_roi_count = _int(r.get("of_wide_lower_roi_count", 0)),
+                of_corner_compact_roi_count = _int(r.get("of_corner_compact_roi_count", 0)),
                 freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
             )
             if det:

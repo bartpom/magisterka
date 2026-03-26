@@ -51,6 +51,7 @@ RAW_FIELDS = [
     "zv_count", "zv_max_score",
     "of_count", "of_max_area", "of_max_area_ratio", "of_global_motion",
     "of_texture_variance_mean", "of_low_texture_roi_count",
+    "of_wide_lower_roi_count", "of_corner_compact_roi_count",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
     "frames_sampled", "duration_s", "detector_version",
@@ -60,10 +61,12 @@ EVAL_FIELDS = [
     "category", "filename", "ground_truth",
     "detected", "fusion_score", "fusion_mode",
     "zv_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
-    "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count", "freq_hf_ratio_mean", "duration_s",
+    "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
+    "of_wide_lower_roi_count", "of_corner_compact_roi_count",
+    "freq_hf_ratio_mean", "duration_s",
 ]
 
-DETECTOR_VERSION = "adv_v4_multisignal_score"
+DETECTOR_VERSION = "adv_v5_geom_penalty"
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -119,6 +122,8 @@ def compute_ai_score(
     low_texture = int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold
     low_hf = float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold
     iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+    wide_lower = int(row.get("of_wide_lower_roi_count", 0))
+    corner_compact = int(row.get("of_corner_compact_roi_count", 0))
 
     # Signal 1: OF obecny i niezdominowany przez gigantyczny overlay.
     if of_count >= 5:
@@ -138,6 +143,11 @@ def compute_ai_score(
         score += 1
     if iw_strong:
         score += 2
+    # Geometry-aware refinements:
+    if wide_lower >= 1:
+        score -= 2
+    if corner_compact >= 1:
+        score += 1
     return score
 
 
@@ -151,8 +161,10 @@ def fuse(
     fft_score: float,
     of_texture_variance_mean: float,
     of_low_texture_roi_count: int,
+    of_wide_lower_roi_count: int,
+    of_corner_compact_roi_count: int,
     freq_hf_ratio_mean: float,
-    points_threshold: int = 3,
+    points_threshold: int = 4,
 ) -> tuple[int, float, str]:
     row = {
         "zv_count": zv_count,
@@ -164,6 +176,8 @@ def fuse(
         "fft_score": fft_score,
         "of_texture_variance_mean": of_texture_variance_mean,
         "of_low_texture_roi_count": of_low_texture_roi_count,
+        "of_wide_lower_roi_count": of_wide_lower_roi_count,
+        "of_corner_compact_roi_count": of_corner_compact_roi_count,
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
     }
     score = compute_ai_score(row)
@@ -216,6 +230,23 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         float(mean(r.get("texture_variance", 0.0) for r in of_rois)) if of_rois else 0.0
     )
     of_low_texture_roi_count = sum(1 for r in of_rois if float(r.get("texture_variance", 0.0)) < 50.0)
+    of_wide_lower_roi_count = sum(
+        1 for r in of_rois
+        if float(r.get("width_ratio", 0.0)) >= 0.45
+        and float(r.get("height_ratio", 0.0)) <= 0.25
+        and float(r.get("cy_rel", 0.0)) >= 0.65
+    )
+    of_corner_compact_roi_count = sum(
+        1 for r in of_rois
+        if float(r.get("area_ratio", 0.0)) >= 0.0002
+        and float(r.get("area_ratio", 0.0)) <= 0.03
+        and (
+            (float(r.get("cx_rel", 0.5)) <= 0.28 and float(r.get("cy_rel", 0.5)) <= 0.28)
+            or (float(r.get("cx_rel", 0.5)) >= 0.72 and float(r.get("cy_rel", 0.5)) <= 0.28)
+            or (float(r.get("cx_rel", 0.5)) <= 0.28 and float(r.get("cy_rel", 0.5)) >= 0.72)
+            or (float(r.get("cx_rel", 0.5)) >= 0.72 and float(r.get("cy_rel", 0.5)) >= 0.72)
+        )
+    )
 
     iw_similarity = float(iw_data.get("score",   0.0))
     iw_matched    = iw_data.get("matched") or ""
@@ -237,6 +268,8 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         "of_global_motion":   round(of_global,     4),
         "of_texture_variance_mean": round(of_texture_variance_mean, 4),
         "of_low_texture_roi_count": of_low_texture_roi_count,
+        "of_wide_lower_roi_count": of_wide_lower_roi_count,
+        "of_corner_compact_roi_count": of_corner_compact_roi_count,
         "iw_found":           iw_found,
         "iw_best_similarity": round(iw_similarity, 4),
         "iw_matched":         iw_matched,
@@ -291,7 +324,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
     """
     Sweep bez ponownego przetwarzania wideo dla reguly punktowej 3/6.
     """
-    points_thresholds = [2, 3, 4]
+    points_thresholds = [3, 4, 5]
 
     sweep_rows = []
     for pts_thr in points_thresholds:
@@ -314,6 +347,8 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
                 fft_score     = float(r["fft_score"]),
                 of_texture_variance_mean = float(r.get("of_texture_variance_mean", 0.0)),
                 of_low_texture_roi_count = int(r.get("of_low_texture_roi_count", 0)),
+                of_wide_lower_roi_count = int(r.get("of_wide_lower_roi_count", 0)),
+                of_corner_compact_roi_count = int(r.get("of_corner_compact_roi_count", 0)),
                 freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
                 points_threshold = pts_thr,
             )
@@ -420,6 +455,8 @@ def main() -> None:
                     fft_score     = sig["fft_score"],
                     of_texture_variance_mean = sig["of_texture_variance_mean"],
                     of_low_texture_roi_count = sig["of_low_texture_roi_count"],
+                    of_wide_lower_roi_count = sig["of_wide_lower_roi_count"],
+                    of_corner_compact_roi_count = sig["of_corner_compact_roi_count"],
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                 )
 
@@ -438,6 +475,8 @@ def main() -> None:
                     "fft_score":          sig["fft_score"],
                     "of_texture_variance_mean": sig["of_texture_variance_mean"],
                     "of_low_texture_roi_count": sig["of_low_texture_roi_count"],
+                    "of_wide_lower_roi_count": sig["of_wide_lower_roi_count"],
+                    "of_corner_compact_roi_count": sig["of_corner_compact_roi_count"],
                     "freq_hf_ratio_mean": sig["freq_hf_ratio_mean"],
                     "duration_s":         f"{elapsed:.2f}",
                 }

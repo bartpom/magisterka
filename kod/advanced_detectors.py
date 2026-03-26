@@ -290,6 +290,10 @@ def detect_optical_flow_overlay(
         results.append({
             "name": f"OF-{pos_v}{pos_h}-{i}",
             "bbox": (bx, by, bx + bw_cnt, by + bh_cnt),
+            "width_ratio": float(bw_cnt) / float(max(w_orig, 1)),
+            "height_ratio": float(bh_cnt) / float(max(h_orig, 1)),
+            "cx_rel": cx_rel,
+            "cy_rel": cy_rel,
             "score": score,
             "area": area,
             "area_ratio": float(area) / float(max(w_orig * h_orig, 1)),
