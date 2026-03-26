@@ -1,35 +1,20 @@
+# OS / IDE
+.idea/
+*.iml
+desktop.ini
+.DS_Store
+
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
-build/
-dist/
-*.egg-info/
-*.egg
-
-# Virtual envs
+.pytest_cache/
+.mypy_cache/
 .venv/
 venv/
-env/
 
-# IDEs
-.idea/
-.vscode/
-*.iml
-
-# OS
-desktop.ini
-.DS_Store
-Thumbs.db
-
-# Project-specific outputs
-raport_zbiorczy.txt
-kod/raport_zbiorczy.txt
-runs/
-_calibration_thresholds.json
+# Local artifacts
 *.log
+<<<<<<< HEAD
 
 # Nagrania i lokalne foldery
 nagrania/
@@ -67,3 +52,11 @@ kod/dataset/*
 
 # PyCharm IDE artifacts (nie powinny trafiać do repo)
 PyCharmMiscProject.iml
+=======
+tmp/
+cache/
+results/
+downloads/
+weights/
+models/
+>>>>>>> 246da3b (Mod gitignore)
