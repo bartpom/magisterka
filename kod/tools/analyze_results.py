@@ -40,6 +40,11 @@ def load_raw(path: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+def _int(x: str) -> int:
+    """Bezpieczna konwersja string -> int, obsługuje '955.0' z CSV."""
+    return int(float(x))
+
+
 # ───────────────────────────────────────────────────────────────────────
 # A: FP stage 1 vs stage 2
 # ───────────────────────────────────────────────────────────────────────
@@ -58,7 +63,7 @@ def analyze_fp_stage(
 
     fp_rows = [
         r for r in rows
-        if r["category"] == "adv_fp_trap" and int(r["ground_truth"]) == 0
+        if r["category"] == "adv_fp_trap" and _int(r["ground_truth"]) == 0
     ]
     if not fp_rows:
         print("  Brak wierszy adv_fp_trap w danych.")
@@ -93,8 +98,8 @@ def analyze_fp_stage(
         # Sprawdz czy fuse() w ogole daje detekcje (stage 2)
         if _fuse:
             det, score, mode = _fuse(
-                zv_count      = int(r["zv_count"]),
-                of_count      = int(r["of_count"]),
+                zv_count      = _int(r["zv_count"]),
+                of_count      = _int(r["of_count"]),
                 iw_similarity = iw_sim,
                 iw_matched    = iw_matched,
                 fft_score     = float(r["fft_score"]),
@@ -162,10 +167,10 @@ def analyze_signal_separation(rows: list[dict]) -> None:
 
     signals = [
         ("iw_best_similarity", float),
-        ("of_count",           int),
-        ("of_max_area",        int),
+        ("of_count",           _int),
+        ("of_max_area",        _int),
         ("of_global_motion",   float),
-        ("zv_count",           int),
+        ("zv_count",           _int),
         ("zv_max_score",       float),
         ("fft_score",          float),
     ]
@@ -219,7 +224,7 @@ def analyze_iw_methods(rows: list[dict]) -> None:
         method = r.get("iw_method", "") or "(brak)"
         cat    = r["category"]
         sim    = float(r["iw_best_similarity"])
-        found  = int(r["iw_found"])
+        found  = _int(r["iw_found"])
         method_stats[method][cat].append((found, sim))
 
     all_methods = sorted(method_stats.keys())
