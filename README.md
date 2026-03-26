@@ -29,6 +29,9 @@ oraz metadane C2PA.
 - Analiza FFT noise — artefakty upsamplingu AI
 - Detekcja metadanych C2PA (Coalition for Content Provenance and Authenticity)
 - Benchmark na czterech zestawach: `ai_baseline`, `adv_compressed`, `adv_cropped`, `adv_fp_trap`
+- Diagnostyka persistent FN (`kod/tools/fn_diagnosis_v2.py`) z liczbową skalą problemu i wzorcami awarii
+- Skrypt do budowy zróżnicowanego benchmarku watermarków (`kod/dataset/download_watermark_benchmark.py`)
+- Skrypt do porównania metryk z narzędziami zewnętrznymi (`kod/tools/compare_external_apps.py`)
 - Zapis surowych wyników każdego detektora do CSV — umożliwia strojenie progów bez ponownego przetwarzania
 
 ---
@@ -81,6 +84,8 @@ magisterka/
 │   │   └── generate_adversarial.py   # wersje compressed/cropped
 │   └── tools/
 │       ├── quick_test.py        # test pojedynczego wideo z CLI
+│       ├── fn_diagnosis_v2.py   # persistent FN: skala + wzorce awarii
+│       ├── compare_external_apps.py # porównanie metryk z innymi aplikacjami
 │       └── sample_videos.py     # sampling klatek
 └── README.md
 ```
@@ -127,7 +132,17 @@ cd kod/dataset
 python download_ai_baseline.py    # ~27 filmów AI
 python download_fp_traps.py       # ~37 filmów-pułapek
 python generate_adversarial.py    # wersje compressed + cropped
+python download_watermark_benchmark.py --per-query 8
 ```
+
+### 1b. Zdiagnozuj persistent false negatives
+
+```bash
+python ../tools/fn_diagnosis_v2.py
+```
+
+Skrypt raportuje m.in. odsetek źródłowych filmów AI, które są FN we wszystkich dodatnich splitach
+oraz liczniki dominujących wzorców błędu (`no zero-variance ROIs`, `small static contour area` itd.).
 
 ### 2. Uruchom ewaluację
 
@@ -156,6 +171,22 @@ Dataset nie jest dołączony do repo (pliki .mp4 są w .gitignore).
 Skrypty pobierające korzystają z `yt-dlp`.
 
 ---
+
+
+## Porównanie z innymi aplikacjami
+
+Po uruchomieniu `evaluate.py` możesz porównać metryki z narzędziem zewnętrznym:
+
+```bash
+python kod/tools/compare_external_apps.py \
+  --external-csv tmp/tool_x_results.csv \
+  --external-name ToolX \
+  --ext-filename-col filename \
+  --ext-pred-col detected
+```
+
+Wynik per plik zapisuje się do `kod/results/latest/external_comparison.csv`.
+To ułatwia rozdział porównawczy w pracy (TP/TN/FP/FN, F1, FPR dla tych samych próbek).
 
 ## Wyniki i ograniczenia
 
