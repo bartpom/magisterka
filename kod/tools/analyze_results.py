@@ -101,6 +101,7 @@ def analyze_fp_stage(
                 zv_count      = _int(r["zv_count"]),
                 of_count      = _int(r["of_count"]),
                 of_max_area   = float(r.get("of_max_area", 0.0)),
+                of_max_area_ratio = float(r.get("of_max_area_ratio", 0.0)),
                 iw_similarity = iw_sim,
                 iw_matched    = iw_matched,
                 fft_score     = float(r["fft_score"]),

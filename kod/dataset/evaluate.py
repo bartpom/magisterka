@@ -49,7 +49,7 @@ CATEGORIES = {
 RAW_FIELDS = [
     "category", "filename", "ground_truth",
     "zv_count", "zv_max_score",
-    "of_count", "of_max_area", "of_global_motion",
+    "of_count", "of_max_area", "of_max_area_ratio", "of_global_motion",
     "of_texture_variance_mean", "of_low_texture_roi_count",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
@@ -59,7 +59,7 @@ RAW_FIELDS = [
 EVAL_FIELDS = [
     "category", "filename", "ground_truth",
     "detected", "fusion_score", "fusion_mode",
-    "zv_count", "of_count", "iw_best_similarity", "iw_matched",
+    "zv_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
     "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count", "freq_hf_ratio_mean", "duration_s",
 ]
 
@@ -107,24 +107,37 @@ def compute_ai_score(
     row: dict[str, Any],
     low_texture_threshold: int = 2,
     hf_ratio_threshold: float = 0.15,
+    max_area_ratio_threshold: float = 0.18,
 ) -> int:
     """
     Multi-signal AI score (0..6) wg założeń zadania.
     """
     score = 0
 
-    # Signal 1: OF kontury, ale bez gigantycznej statycznej bryły (TV overlay trap)
-    if int(row.get("of_count", 0)) >= 5 and float(row.get("of_max_area", 0.0)) < 500_000:
+    of_count = int(row.get("of_count", 0))
+    area_ratio = float(row.get("of_max_area_ratio", 1.0))
+    low_texture = int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold
+    low_hf = float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold
+    iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+
+    # Signal 1: OF obecny i niezdominowany przez gigantyczny overlay.
+    if of_count >= 5:
         score += 1
+    if area_ratio < max_area_ratio_threshold:
+        score += 1
+    else:
+        score -= 1
     # Signal 2: niski texture variance w ROI OF (AI smoothness)
-    if int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold:
+    if low_texture:
         score += 2
     # Signal 3: niski udział HF (AI smoothness w domenie częstotliwości)
-    if float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold:
+    if low_hf:
         score += 2
     # Signal 4: regiony zero-variance (statyczne overlaye/logotypy)
     if int(row.get("zv_count", 0)) >= 1:
         score += 1
+    if iw_strong:
+        score += 2
     return score
 
 
@@ -132,6 +145,7 @@ def fuse(
     zv_count: int,
     of_count: int,
     of_max_area: float,
+    of_max_area_ratio: float,
     iw_similarity: float,
     iw_matched: str,
     fft_score: float,
@@ -144,6 +158,7 @@ def fuse(
         "zv_count": zv_count,
         "of_count": of_count,
         "of_max_area": of_max_area,
+        "of_max_area_ratio": of_max_area_ratio,
         "iw_similarity": iw_similarity,
         "iw_matched": iw_matched,
         "fft_score": fft_score,
@@ -152,7 +167,13 @@ def fuse(
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
     }
     score = compute_ai_score(row)
-    return int(score >= points_threshold), float(score), f"ai_score={score}"
+    ai_specific = (
+        row["of_low_texture_roi_count"] >= 2
+        or row["freq_hf_ratio_mean"] < 0.15
+        or (bool(row["iw_matched"]) and row["iw_similarity"] >= 0.85)
+    )
+    detected = int(score >= points_threshold and ai_specific)
+    return detected, float(score), f"ai_score={score};ai_specific={int(ai_specific)}"
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -189,6 +210,7 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
     zv_max_score = max((r.get("score", 0.0) for r in zv_rois), default=0.0)
     of_count     = len(of_rois)
     of_max_area  = max((r.get("area",  0)   for r in of_rois), default=0)
+    of_max_area_ratio = max((float(r.get("area_ratio", 0.0)) for r in of_rois), default=0.0)
     of_global    = of_rois[0].get("global_motion", 0.0) if of_rois else 0.0
     of_texture_variance_mean = (
         float(mean(r.get("texture_variance", 0.0) for r in of_rois)) if of_rois else 0.0
@@ -211,6 +233,7 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         "zv_max_score":       round(zv_max_score,  4),
         "of_count":           of_count,
         "of_max_area":        of_max_area,
+        "of_max_area_ratio":  round(of_max_area_ratio, 6),
         "of_global_motion":   round(of_global,     4),
         "of_texture_variance_mean": round(of_texture_variance_mean, 4),
         "of_low_texture_roi_count": of_low_texture_roi_count,
@@ -285,6 +308,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
                 zv_count      = int(r["zv_count"]),
                 of_count      = int(r["of_count"]),
                 of_max_area   = float(r.get("of_max_area", 0.0)),
+                of_max_area_ratio = float(r.get("of_max_area_ratio", 0.0)),
                 iw_similarity = float(r["iw_best_similarity"]),
                 iw_matched    = r["iw_matched"],
                 fft_score     = float(r["fft_score"]),
@@ -390,6 +414,7 @@ def main() -> None:
                     zv_count      = sig["zv_count"],
                     of_count      = sig["of_count"],
                     of_max_area   = sig["of_max_area"],
+                    of_max_area_ratio = sig["of_max_area_ratio"],
                     iw_similarity = sig["iw_best_similarity"],
                     iw_matched    = sig["iw_matched"],
                     fft_score     = sig["fft_score"],
@@ -407,6 +432,7 @@ def main() -> None:
                     "fusion_mode":        mode,
                     "zv_count":           sig["zv_count"],
                     "of_count":           sig["of_count"],
+                    "of_max_area_ratio":  sig["of_max_area_ratio"],
                     "iw_best_similarity": sig["iw_best_similarity"],
                     "iw_matched":         sig["iw_matched"],
                     "fft_score":          sig["fft_score"],
@@ -465,7 +491,7 @@ def main() -> None:
 
     # —— Threshold sweep (na surowych sygnałach) ——
     if raw_rows:
-        print("\n[SWEEP] Obliczam threshold sweep (rozszerzony o iw_strong)...")
+        print("\n[SWEEP] Obliczam threshold sweep (progi punktowe)...")
         sweep = run_threshold_sweep(raw_rows)
         sweep_path = snap_dir / "threshold_sweep.csv"
         with sweep_path.open("w", encoding="utf-8", newline="") as f:

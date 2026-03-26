@@ -292,6 +292,7 @@ def detect_optical_flow_overlay(
             "bbox": (bx, by, bx + bw_cnt, by + bh_cnt),
             "score": score,
             "area": area,
+            "area_ratio": float(area) / float(max(w_orig * h_orig, 1)),
             "global_motion": global_mean_motion,
             "texture_variance": texture_variance,
             "is_low_texture": bool(texture_variance < low_texture_threshold),
@@ -365,17 +366,20 @@ def detect_invisible_watermark(
 
     for method in methods:
         try:
-            decoder = WatermarkDecoder('bits', watermark_length)
+            method_bits = 32 if method == "rivaGan" else watermark_length
+            decoder = WatermarkDecoder('bits', method_bits)
             watermark_bits = decoder.decode(bgr, method)
             bits_str = ''.join(str(int(b)) for b in watermark_bits)
 
             matched = None
             best_similarity = 0.0
             for sig_name, sig_bits in _KNOWN_SIGNATURES.items():
-                if len(sig_bits) <= len(bits_str):
-                    sub = bits_str[:len(sig_bits)]
-                    matches = sum(a == b for a, b in zip(sub, sig_bits))
-                    sim = matches / len(sig_bits)
+                cmp_len = min(len(sig_bits), len(bits_str))
+                if cmp_len >= 16:
+                    sub = bits_str[:cmp_len]
+                    ref = sig_bits[:cmp_len]
+                    matches = sum(a == b for a, b in zip(sub, ref))
+                    sim = matches / cmp_len
                     if sim > best_similarity:
                         best_similarity = sim
                         if sim >= 0.85:
@@ -402,6 +406,23 @@ def detect_invisible_watermark(
                 return result
 
         except Exception as e:
+            # Fallback dla starszych wersji rivaGan, które wspierają tylko 32-bit.
+            if method == "rivaGan" and "32 bits" in str(e):
+                try:
+                    decoder = WatermarkDecoder('bits', 32)
+                    watermark_bits = decoder.decode(bgr, method)
+                    bits_str = ''.join(str(int(b)) for b in watermark_bits)
+                    result["found"] = bool(bits_str)
+                    result["method"] = "invisible_watermark:rivaGan"
+                    result["bits"] = bits_str
+                    result["matched"] = None
+                    result["score"] = 0.5 if bits_str else 0.0
+                    result["details"] = "rivaGan fallback: decode 32-bit watermark"
+                    if bits_str:
+                        return result
+                except Exception as fallback_e:
+                    result["details"] = f"blad {method} fallback32: {fallback_e}"
+                    continue
             result["details"] = f"blad {method}: {e}"
             continue
 
