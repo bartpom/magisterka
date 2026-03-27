@@ -35,12 +35,17 @@ import cv2
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from advanced_detectors import run_advanced_scan
 from fusion_params import (
+    BILLBOARD_CENTER_RATIO_MIN,
+    BILLBOARD_GLOBAL_MOTION_MIN,
+    BILLBOARD_TEXTURE_MIN,
     HF_RATIO_THRESHOLD,
     LOWER_THIRD_HARD_THRESHOLD,
+    LOWER_THIRD_HARD_UPPER_MAX,
     LOW_TEXTURE_THRESHOLD,
     MAX_AREA_RATIO_THRESHOLD,
     POINTS_THRESHOLD_DEFAULT,
     POINTS_THRESHOLD_SWEEP,
+    SCOREBOARD_HF_MIN,
 )
 
 DATASET_ROOT = Path(__file__).parent
@@ -60,6 +65,8 @@ RAW_FIELDS = [
     "of_count", "of_max_area", "of_max_area_ratio", "of_global_motion",
     "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
+    "of_upper_third_roi_ratio", "of_center_roi_ratio", "of_wide_top_bottom_count",
+    "broadcast_scoreboard_trap", "broadcast_billboard_trap",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
     "frames_sampled", "duration_s", "detector_version",
@@ -71,6 +78,8 @@ EVAL_FIELDS = [
     "zv_count", "zv_lower_third_roi_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
     "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
+    "of_upper_third_roi_ratio", "of_center_roi_ratio", "of_wide_top_bottom_count",
+    "broadcast_scoreboard_trap", "broadcast_billboard_trap",
     "freq_hf_ratio_mean", "duration_s",
 ]
 
@@ -134,6 +143,7 @@ def compute_ai_score(
     wide_lower = int(row.get("of_wide_lower_roi_count", 0))
     corner_compact = int(row.get("of_corner_compact_roi_count", 0))
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
+    upper_third_ratio = float(row.get("of_upper_third_roi_ratio", 0.0))
     zv_lower_third = int(row.get("zv_lower_third_roi_count", 0))
 
     # Signal 1: OF obecny i niezdominowany przez gigantyczny overlay.
@@ -160,8 +170,16 @@ def compute_ai_score(
     if corner_compact >= 1:
         score += 1
     # Hard broadcast-trap heuristic: dolny-dominujacy OF + statyczne ROI na dole.
-    if lower_third_ratio > lower_third_hard_threshold and zv_lower_third > 0:
+    if (
+        lower_third_ratio > lower_third_hard_threshold
+        and upper_third_ratio < LOWER_THIRD_HARD_UPPER_MAX
+        and zv_lower_third > 0
+    ):
         score -= 3
+    if int(row.get("broadcast_scoreboard_trap", 0)) == 1:
+        score -= 3
+    if int(row.get("broadcast_billboard_trap", 0)) == 1:
+        score -= 2
     return score
 
 
@@ -171,10 +189,16 @@ def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
         or row.get("freq_hf_ratio_mean", 1.0) < HF_RATIO_THRESHOLD
         or (bool(row.get("iw_matched")) and row.get("iw_similarity", 0.0) >= 0.85)
     )
-    broadcast_trap = int(
+    lower_third_trap = int(
         row.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
+        and row.get("of_upper_third_roi_ratio", 1.0) < LOWER_THIRD_HARD_UPPER_MAX
         and row.get("zv_lower_third_roi_count", 0) > 0
     )
+    scoreboard_trap = int(row.get("broadcast_scoreboard_trap", 0))
+    billboard_trap = int(row.get("broadcast_billboard_trap", 0))
+    broadcast_trap = int(lower_third_trap or scoreboard_trap or billboard_trap)
+    if broadcast_trap:
+        ai_specific = 0
     return ai_specific, broadcast_trap
 
 
@@ -192,6 +216,11 @@ def fuse(
     of_wide_lower_roi_count: int,
     of_corner_compact_roi_count: int,
     of_lower_third_roi_ratio: float,
+    of_upper_third_roi_ratio: float,
+    of_center_roi_ratio: float,
+    of_wide_top_bottom_count: int,
+    broadcast_scoreboard_trap: int,
+    broadcast_billboard_trap: int,
     freq_hf_ratio_mean: float,
     points_threshold: int = POINTS_THRESHOLD_DEFAULT,
 ) -> tuple[int, float, str, int, int]:
@@ -209,6 +238,11 @@ def fuse(
         "of_wide_lower_roi_count": of_wide_lower_roi_count,
         "of_corner_compact_roi_count": of_corner_compact_roi_count,
         "of_lower_third_roi_ratio": of_lower_third_roi_ratio,
+        "of_upper_third_roi_ratio": of_upper_third_roi_ratio,
+        "of_center_roi_ratio": of_center_roi_ratio,
+        "of_wide_top_bottom_count": of_wide_top_bottom_count,
+        "broadcast_scoreboard_trap": broadcast_scoreboard_trap,
+        "broadcast_billboard_trap": broadcast_billboard_trap,
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
     }
     score = compute_ai_score(row)
@@ -271,8 +305,24 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         and float(r.get("cy_rel", 0.0)) >= 0.65
     )
     lower_third_roi_count = sum(1 for r in of_rois if float(r.get("cy_rel", 0.0)) >= 0.67)
+    upper_third_roi_count = sum(1 for r in of_rois if float(r.get("cy_rel", 0.0)) <= 0.33)
+    center_roi_count = sum(
+        1 for r in of_rois
+        if 0.33 < float(r.get("cy_rel", 0.0)) < 0.67
+    )
     of_lower_third_roi_ratio = (
         float(lower_third_roi_count) / float(max(of_count, 1)) if of_count > 0 else 0.0
+    )
+    of_upper_third_roi_ratio = (
+        float(upper_third_roi_count) / float(max(of_count, 1)) if of_count > 0 else 0.0
+    )
+    of_center_roi_ratio = (
+        float(center_roi_count) / float(max(of_count, 1)) if of_count > 0 else 0.0
+    )
+    of_wide_top_bottom_count = sum(
+        1 for r in of_rois
+        if float(r.get("width_ratio", 0.0)) >= 0.80
+        and (float(r.get("cy_rel", 0.0)) <= 0.30 or float(r.get("cy_rel", 0.0)) >= 0.70)
     )
     of_corner_compact_roi_count = sum(
         1 for r in of_rois
@@ -296,6 +346,17 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
     freq_hf_ratio_mean = float(
         fft_data.get("freq_hf_ratio_mean", fft_data.get("freq_hf_ratio", 0.0))
     )
+    broadcast_scoreboard_trap = int(
+        of_wide_top_bottom_count >= 1
+        and freq_hf_ratio_mean >= SCOREBOARD_HF_MIN
+        and of_low_texture_roi_count == 0
+    )
+    broadcast_billboard_trap = int(
+        of_center_roi_ratio >= BILLBOARD_CENTER_RATIO_MIN
+        and of_global >= BILLBOARD_GLOBAL_MOTION_MIN
+        and of_texture_variance_mean >= BILLBOARD_TEXTURE_MIN
+        and of_low_texture_roi_count == 0
+    )
 
     return {
         "zv_count":           zv_count,
@@ -310,6 +371,11 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         "of_wide_lower_roi_count": of_wide_lower_roi_count,
         "of_corner_compact_roi_count": of_corner_compact_roi_count,
         "of_lower_third_roi_ratio": round(of_lower_third_roi_ratio, 4),
+        "of_upper_third_roi_ratio": round(of_upper_third_roi_ratio, 4),
+        "of_center_roi_ratio": round(of_center_roi_ratio, 4),
+        "of_wide_top_bottom_count": of_wide_top_bottom_count,
+        "broadcast_scoreboard_trap": broadcast_scoreboard_trap,
+        "broadcast_billboard_trap": broadcast_billboard_trap,
         "iw_found":           iw_found,
         "iw_best_similarity": round(iw_similarity, 4),
         "iw_matched":         iw_matched,
@@ -391,6 +457,11 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
                 of_wide_lower_roi_count = int(r.get("of_wide_lower_roi_count", 0)),
                 of_corner_compact_roi_count = int(r.get("of_corner_compact_roi_count", 0)),
                 of_lower_third_roi_ratio = float(r.get("of_lower_third_roi_ratio", 0.0)),
+                of_upper_third_roi_ratio = float(r.get("of_upper_third_roi_ratio", 0.0)),
+                of_center_roi_ratio = float(r.get("of_center_roi_ratio", 0.0)),
+                of_wide_top_bottom_count = int(r.get("of_wide_top_bottom_count", 0)),
+                broadcast_scoreboard_trap = int(r.get("broadcast_scoreboard_trap", 0)),
+                broadcast_billboard_trap = int(r.get("broadcast_billboard_trap", 0)),
                 freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
                 points_threshold = pts_thr,
             )
@@ -501,6 +572,11 @@ def main() -> None:
                     of_wide_lower_roi_count = sig["of_wide_lower_roi_count"],
                     of_corner_compact_roi_count = sig["of_corner_compact_roi_count"],
                     of_lower_third_roi_ratio = sig["of_lower_third_roi_ratio"],
+                    of_upper_third_roi_ratio = sig["of_upper_third_roi_ratio"],
+                    of_center_roi_ratio = sig["of_center_roi_ratio"],
+                    of_wide_top_bottom_count = sig["of_wide_top_bottom_count"],
+                    broadcast_scoreboard_trap = sig["broadcast_scoreboard_trap"],
+                    broadcast_billboard_trap = sig["broadcast_billboard_trap"],
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                 )
 
@@ -525,6 +601,11 @@ def main() -> None:
                     "of_wide_lower_roi_count": sig["of_wide_lower_roi_count"],
                     "of_corner_compact_roi_count": sig["of_corner_compact_roi_count"],
                     "of_lower_third_roi_ratio": sig["of_lower_third_roi_ratio"],
+                    "of_upper_third_roi_ratio": sig["of_upper_third_roi_ratio"],
+                    "of_center_roi_ratio": sig["of_center_roi_ratio"],
+                    "of_wide_top_bottom_count": sig["of_wide_top_bottom_count"],
+                    "broadcast_scoreboard_trap": sig["broadcast_scoreboard_trap"],
+                    "broadcast_billboard_trap": sig["broadcast_billboard_trap"],
                     "freq_hf_ratio_mean": sig["freq_hf_ratio_mean"],
                     "duration_s":         f"{elapsed:.2f}",
                 }
