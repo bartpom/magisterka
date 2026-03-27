@@ -29,11 +29,19 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-import itertools
+from statistics import mean
 import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from advanced_detectors import run_advanced_scan
+from fusion_params import (
+    HF_RATIO_THRESHOLD,
+    LOWER_THIRD_HARD_THRESHOLD,
+    LOW_TEXTURE_THRESHOLD,
+    MAX_AREA_RATIO_THRESHOLD,
+    POINTS_THRESHOLD_DEFAULT,
+    POINTS_THRESHOLD_SWEEP,
+)
 
 DATASET_ROOT = Path(__file__).parent
 RESULTS_BASE = DATASET_ROOT.parent / "results"
@@ -48,21 +56,25 @@ CATEGORIES = {
 
 RAW_FIELDS = [
     "category", "filename", "ground_truth",
-    "zv_count", "zv_max_score",
-    "of_count", "of_max_area", "of_global_motion",
+    "zv_count", "zv_max_score", "zv_lower_third_roi_count",
+    "of_count", "of_max_area", "of_max_area_ratio", "of_global_motion",
+    "of_texture_variance_mean", "of_low_texture_roi_count",
+    "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
-    "fft_found", "fft_score",
+    "fft_found", "fft_score", "freq_hf_ratio_mean",
     "frames_sampled", "duration_s", "detector_version",
 ]
 
 EVAL_FIELDS = [
     "category", "filename", "ground_truth",
-    "detected", "fusion_score", "fusion_mode",
-    "zv_count", "of_count", "iw_best_similarity", "iw_matched",
-    "fft_score", "duration_s",
+    "detected", "fusion_score", "fusion_mode", "ai_specific", "broadcast_trap",
+    "zv_count", "zv_lower_third_roi_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
+    "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
+    "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
+    "freq_hf_ratio_mean", "duration_s",
 ]
 
-DETECTOR_VERSION = "adv_v2_sweep"
+DETECTOR_VERSION = "adv_v5_geom_penalty"
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -102,54 +114,110 @@ def copy_to_latest(snap_dir: Path) -> None:
 # Fuzja sygnalow
 # ───────────────────────────────────────────────────────────────────────
 
+def compute_ai_score(
+    row: dict[str, Any],
+    low_texture_threshold: int = LOW_TEXTURE_THRESHOLD,
+    hf_ratio_threshold: float = HF_RATIO_THRESHOLD,
+    max_area_ratio_threshold: float = MAX_AREA_RATIO_THRESHOLD,
+    lower_third_hard_threshold: float = LOWER_THIRD_HARD_THRESHOLD,
+) -> int:
+    """
+    Multi-signal AI score (0..6) wg założeń zadania.
+    """
+    score = 0
+
+    of_count = int(row.get("of_count", 0))
+    area_ratio = float(row.get("of_max_area_ratio", 1.0))
+    low_texture = int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold
+    low_hf = float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold
+    iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+    wide_lower = int(row.get("of_wide_lower_roi_count", 0))
+    corner_compact = int(row.get("of_corner_compact_roi_count", 0))
+    lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
+    zv_lower_third = int(row.get("zv_lower_third_roi_count", 0))
+
+    # Signal 1: OF obecny i niezdominowany przez gigantyczny overlay.
+    if of_count >= 5:
+        score += 1
+    if area_ratio < max_area_ratio_threshold:
+        score += 1
+    else:
+        score -= 1
+    # Signal 2: niski texture variance w ROI OF (AI smoothness)
+    if low_texture:
+        score += 2
+    # Signal 3: niski udział HF (AI smoothness w domenie częstotliwości)
+    if low_hf:
+        score += 2
+    # Signal 4: regiony zero-variance (statyczne overlaye/logotypy)
+    if int(row.get("zv_count", 0)) >= 1:
+        score += 1
+    if iw_strong:
+        score += 2
+    # Geometry-aware refinements:
+    if wide_lower >= 1:
+        score -= 2
+    if corner_compact >= 1:
+        score += 1
+    # Hard broadcast-trap heuristic: dolny-dominujacy OF + statyczne ROI na dole.
+    if lower_third_ratio > lower_third_hard_threshold and zv_lower_third > 0:
+        score -= 3
+    return score
+
+
+def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
+    ai_specific = int(
+        row.get("of_low_texture_roi_count", 0) >= LOW_TEXTURE_THRESHOLD
+        or row.get("freq_hf_ratio_mean", 1.0) < HF_RATIO_THRESHOLD
+        or (bool(row.get("iw_matched")) and row.get("iw_similarity", 0.0) >= 0.85)
+    )
+    broadcast_trap = int(
+        row.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
+        and row.get("zv_lower_third_roi_count", 0) > 0
+    )
+    return ai_specific, broadcast_trap
+
+
 def fuse(
     zv_count: int,
+    zv_lower_third_roi_count: int,
     of_count: int,
+    of_max_area: float,
+    of_max_area_ratio: float,
     iw_similarity: float,
     iw_matched: str,
     fft_score: float,
-    c2pa_found: bool = False,
-    iw_strong_threshold: float = 0.85,
-    of_threshold: int = 6,
-    iw_weak_threshold: float = 0.65,
-    zv_threshold: int = 2,
-    fft_threshold: float = 0.30,
-    score_threshold: float = 0.62,
-    min_weak_votes: int = 2,
-) -> tuple[int, float, str]:
-    """
-    Fuzja sygnalow — zwraca (detected: 0/1, fusion_score: float, mode: str).
-
-    Logika dwustopniowa:
-    1. Sygnaly wysokiej precyzji: C2PA lub silny invisible WM.
-    2. Score wazony + glosowanie heurystyk.
-    """
-    if c2pa_found:
-        return 1, 1.0, "c2pa"
-    if iw_matched and iw_similarity >= iw_strong_threshold:
-        return 1, iw_similarity, f"iw_strong:{iw_matched}"
-
-    iw_norm = min(1.0, iw_similarity)
-    of_norm = min(1.0, of_count / max(of_threshold, 1))
-    zv_norm = min(1.0, zv_count / max(zv_threshold, 1))
-
-    score = (
-        0.45 * iw_norm +
-        0.25 * of_norm +
-        0.20 * zv_norm +
-        0.10 * fft_score
-    )
-
-    votes = sum([
-        iw_similarity >= iw_weak_threshold,
-        of_count >= of_threshold,
-        zv_count >= zv_threshold,
-        fft_score >= fft_threshold,
-    ])
-
-    if score >= score_threshold and votes >= min_weak_votes:
-        return 1, round(score, 4), f"weighted:votes={votes}"
-    return 0, round(score, 4), f"below_thr:votes={votes}"
+    of_texture_variance_mean: float,
+    of_low_texture_roi_count: int,
+    of_wide_lower_roi_count: int,
+    of_corner_compact_roi_count: int,
+    of_lower_third_roi_ratio: float,
+    freq_hf_ratio_mean: float,
+    points_threshold: int = POINTS_THRESHOLD_DEFAULT,
+) -> tuple[int, float, str, int, int]:
+    row = {
+        "zv_count": zv_count,
+        "zv_lower_third_roi_count": zv_lower_third_roi_count,
+        "of_count": of_count,
+        "of_max_area": of_max_area,
+        "of_max_area_ratio": of_max_area_ratio,
+        "iw_similarity": iw_similarity,
+        "iw_matched": iw_matched,
+        "fft_score": fft_score,
+        "of_texture_variance_mean": of_texture_variance_mean,
+        "of_low_texture_roi_count": of_low_texture_roi_count,
+        "of_wide_lower_roi_count": of_wide_lower_roi_count,
+        "of_corner_compact_roi_count": of_corner_compact_roi_count,
+        "of_lower_third_roi_ratio": of_lower_third_roi_ratio,
+        "freq_hf_ratio_mean": freq_hf_ratio_mean,
+    }
+    score = compute_ai_score(row)
+    ai_specific, broadcast_trap = compute_ai_flags(row)
+    lower_third_ok = not broadcast_trap
+    detected = int(score >= points_threshold and ai_specific and lower_third_ok)
+    return detected, float(score), (
+        f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)}"
+    ), int(ai_specific), int(broadcast_trap)
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -184,9 +252,39 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
 
     zv_count     = len(zv_rois)
     zv_max_score = max((r.get("score", 0.0) for r in zv_rois), default=0.0)
+    zv_lower_third_roi_count = sum(
+        1 for r in zv_rois
+        if r.get("name") in {"CORNER-BL", "CORNER-BR"}
+    )
     of_count     = len(of_rois)
     of_max_area  = max((r.get("area",  0)   for r in of_rois), default=0)
+    of_max_area_ratio = max((float(r.get("area_ratio", 0.0)) for r in of_rois), default=0.0)
     of_global    = of_rois[0].get("global_motion", 0.0) if of_rois else 0.0
+    of_texture_variance_mean = (
+        float(mean(r.get("texture_variance", 0.0) for r in of_rois)) if of_rois else 0.0
+    )
+    of_low_texture_roi_count = sum(1 for r in of_rois if float(r.get("texture_variance", 0.0)) < 50.0)
+    of_wide_lower_roi_count = sum(
+        1 for r in of_rois
+        if float(r.get("width_ratio", 0.0)) >= 0.45
+        and float(r.get("height_ratio", 0.0)) <= 0.25
+        and float(r.get("cy_rel", 0.0)) >= 0.65
+    )
+    lower_third_roi_count = sum(1 for r in of_rois if float(r.get("cy_rel", 0.0)) >= 0.67)
+    of_lower_third_roi_ratio = (
+        float(lower_third_roi_count) / float(max(of_count, 1)) if of_count > 0 else 0.0
+    )
+    of_corner_compact_roi_count = sum(
+        1 for r in of_rois
+        if float(r.get("area_ratio", 0.0)) >= 0.0002
+        and float(r.get("area_ratio", 0.0)) <= 0.03
+        and (
+            (float(r.get("cx_rel", 0.5)) <= 0.28 and float(r.get("cy_rel", 0.5)) <= 0.28)
+            or (float(r.get("cx_rel", 0.5)) >= 0.72 and float(r.get("cy_rel", 0.5)) <= 0.28)
+            or (float(r.get("cx_rel", 0.5)) <= 0.28 and float(r.get("cy_rel", 0.5)) >= 0.72)
+            or (float(r.get("cx_rel", 0.5)) >= 0.72 and float(r.get("cy_rel", 0.5)) >= 0.72)
+        )
+    )
 
     iw_similarity = float(iw_data.get("score",   0.0))
     iw_matched    = iw_data.get("matched") or ""
@@ -195,19 +293,30 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
 
     fft_found = 1 if fft_data.get("found", False) else 0
     fft_score = float(fft_data.get("score", 0.0))
+    freq_hf_ratio_mean = float(
+        fft_data.get("freq_hf_ratio_mean", fft_data.get("freq_hf_ratio", 0.0))
+    )
 
     return {
         "zv_count":           zv_count,
         "zv_max_score":       round(zv_max_score,  4),
+        "zv_lower_third_roi_count": zv_lower_third_roi_count,
         "of_count":           of_count,
         "of_max_area":        of_max_area,
+        "of_max_area_ratio":  round(of_max_area_ratio, 6),
         "of_global_motion":   round(of_global,     4),
+        "of_texture_variance_mean": round(of_texture_variance_mean, 4),
+        "of_low_texture_roi_count": of_low_texture_roi_count,
+        "of_wide_lower_roi_count": of_wide_lower_roi_count,
+        "of_corner_compact_roi_count": of_corner_compact_roi_count,
+        "of_lower_third_roi_ratio": round(of_lower_third_roi_ratio, 4),
         "iw_found":           iw_found,
         "iw_best_similarity": round(iw_similarity, 4),
         "iw_matched":         iw_matched,
         "iw_method":          iw_method,
         "fft_found":          fft_found,
         "fft_score":          round(fft_score,     4),
+        "freq_hf_ratio_mean": round(freq_hf_ratio_mean, 4),
     }
 
 
@@ -253,27 +362,12 @@ def compute_metrics(rows: list[dict], pred_field: str = "detected") -> list[dict
 
 def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
     """
-    Sweep bez ponownego przetwarzania wideo.
-    Rozszerzony o iw_strong_threshold — kluczowe, gdy stage 1 robi FP.
-
-    Kombinacje: 4 x iw_strong * 5 x iw_weak * 5 x of * 4 x score = 400 wierszy
+    Sweep bez ponownego przetwarzania wideo dla reguly punktowej 3/6.
     """
-    # Progi stage 1 (silny IW)
-    iw_strong_thresholds = [0.75, 0.80, 0.85, 0.90]
-    # Progi stage 2
-    iw_weak_thresholds   = [0.55, 0.60, 0.65, 0.70, 0.75]
-    of_thresholds        = [3, 5, 8, 10, 15]
-    score_thresholds     = [0.55, 0.60, 0.62, 0.65]
+    points_thresholds = POINTS_THRESHOLD_SWEEP
 
     sweep_rows = []
-    for iw_strong, iw_weak, of_thr, sc_thr in itertools.product(
-        iw_strong_thresholds, iw_weak_thresholds,
-        of_thresholds, score_thresholds
-    ):
-        # iw_weak nie moze byc wyzszy niz iw_strong
-        if iw_weak >= iw_strong:
-            continue
-
+    for pts_thr in points_thresholds:
         preds, gts = [], []
         # Zliczaj FP per split osobno (potrzebne do wyboru konfiguracji wg TPR/FPR per-split)
         split_tp:  dict[str, int] = {}
@@ -283,17 +377,22 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
         for r in raw_rows:
             gt_val = int(r["ground_truth"])
             cat    = r["category"]
-            det, _, _ = fuse(
+            det, _, _, _, _ = fuse(
                 zv_count      = int(r["zv_count"]),
+                zv_lower_third_roi_count = int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = int(r["of_count"]),
+                of_max_area   = float(r.get("of_max_area", 0.0)),
+                of_max_area_ratio = float(r.get("of_max_area_ratio", 0.0)),
                 iw_similarity = float(r["iw_best_similarity"]),
                 iw_matched    = r["iw_matched"],
                 fft_score     = float(r["fft_score"]),
-                iw_strong_threshold = iw_strong,
-                of_threshold        = of_thr,
-                iw_weak_threshold   = iw_weak,
-                score_threshold     = sc_thr,
-                min_weak_votes      = 2,
+                of_texture_variance_mean = float(r.get("of_texture_variance_mean", 0.0)),
+                of_low_texture_roi_count = int(r.get("of_low_texture_roi_count", 0)),
+                of_wide_lower_roi_count = int(r.get("of_wide_lower_roi_count", 0)),
+                of_corner_compact_roi_count = int(r.get("of_corner_compact_roi_count", 0)),
+                of_lower_third_roi_ratio = float(r.get("of_lower_third_roi_ratio", 0.0)),
+                freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
+                points_threshold = pts_thr,
             )
             preds.append(det)
             gts.append(gt_val)
@@ -325,10 +424,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
             return f"{fp_c / (fp_c + tn_c):.4f}" if (fp_c + tn_c) > 0 else "N/A"
 
         sweep_rows.append({
-            "iw_strong_thr":         iw_strong,
-            "iw_weak_thr":           iw_weak,
-            "of_thr":                of_thr,
-            "score_thr":             sc_thr,
+            "points_thr":            pts_thr,
             "TP": tp, "TN": tn, "FP": fp, "FN": fn,
             "accuracy":              f"{acc:.4f}",
             "precision":             f"{prec:.4f}",
@@ -391,12 +487,21 @@ def main() -> None:
                 }
                 raw_rows.append(raw_row)
 
-                det, score, mode = fuse(
+                det, score, mode, ai_specific, broadcast_trap = fuse(
                     zv_count      = sig["zv_count"],
+                    zv_lower_third_roi_count = sig["zv_lower_third_roi_count"],
                     of_count      = sig["of_count"],
+                    of_max_area   = sig["of_max_area"],
+                    of_max_area_ratio = sig["of_max_area_ratio"],
                     iw_similarity = sig["iw_best_similarity"],
                     iw_matched    = sig["iw_matched"],
                     fft_score     = sig["fft_score"],
+                    of_texture_variance_mean = sig["of_texture_variance_mean"],
+                    of_low_texture_roi_count = sig["of_low_texture_roi_count"],
+                    of_wide_lower_roi_count = sig["of_wide_lower_roi_count"],
+                    of_corner_compact_roi_count = sig["of_corner_compact_roi_count"],
+                    of_lower_third_roi_ratio = sig["of_lower_third_roi_ratio"],
+                    freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                 )
 
                 eval_row = {
@@ -406,11 +511,21 @@ def main() -> None:
                     "detected":           det,
                     "fusion_score":       score,
                     "fusion_mode":        mode,
+                    "ai_specific":        ai_specific,
+                    "broadcast_trap":     broadcast_trap,
                     "zv_count":           sig["zv_count"],
+                    "zv_lower_third_roi_count": sig["zv_lower_third_roi_count"],
                     "of_count":           sig["of_count"],
+                    "of_max_area_ratio":  sig["of_max_area_ratio"],
                     "iw_best_similarity": sig["iw_best_similarity"],
                     "iw_matched":         sig["iw_matched"],
                     "fft_score":          sig["fft_score"],
+                    "of_texture_variance_mean": sig["of_texture_variance_mean"],
+                    "of_low_texture_roi_count": sig["of_low_texture_roi_count"],
+                    "of_wide_lower_roi_count": sig["of_wide_lower_roi_count"],
+                    "of_corner_compact_roi_count": sig["of_corner_compact_roi_count"],
+                    "of_lower_third_roi_ratio": sig["of_lower_third_roi_ratio"],
+                    "freq_hf_ratio_mean": sig["freq_hf_ratio_mean"],
                     "duration_s":         f"{elapsed:.2f}",
                 }
                 eval_rows.append(eval_row)
@@ -463,7 +578,7 @@ def main() -> None:
 
     # —— Threshold sweep (na surowych sygnałach) ——
     if raw_rows:
-        print("\n[SWEEP] Obliczam threshold sweep (rozszerzony o iw_strong)...")
+        print("\n[SWEEP] Obliczam threshold sweep (progi punktowe)...")
         sweep = run_threshold_sweep(raw_rows)
         sweep_path = snap_dir / "threshold_sweep.csv"
         with sweep_path.open("w", encoding="utf-8", newline="") as f:
@@ -475,8 +590,7 @@ def main() -> None:
         print("\n--- Top-5 konfiguracji (FPR_adv_fp_trap ASC, TPR_aibaseline DESC) ---")
         for row in sweep[:5]:
             print(
-                f"  iw_strong={row['iw_strong_thr']}  iw_weak={row['iw_weak_thr']}  "
-                f"of={row['of_thr']}  sc={row['score_thr']}  "
+                f"  pts={row['points_thr']}  "
                 f"FPR_fptrap={row['FPR_adv_fp_trap']}  "
                 f"TPR_ai={row['TPR_aibaseline']}  F1={row['f1']}"
             )

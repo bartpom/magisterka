@@ -97,12 +97,21 @@ def analyze_fp_stage(
 
         # Sprawdz czy fuse() w ogole daje detekcje (stage 2)
         if _fuse:
-            det, score, mode = _fuse(
+            det, score, mode, *_ = _fuse(
                 zv_count      = _int(r["zv_count"]),
+                zv_lower_third_roi_count = _int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = _int(r["of_count"]),
+                of_max_area   = float(r.get("of_max_area", 0.0)),
+                of_max_area_ratio = float(r.get("of_max_area_ratio", 0.0)),
                 iw_similarity = iw_sim,
                 iw_matched    = iw_matched,
                 fft_score     = float(r["fft_score"]),
+                of_texture_variance_mean = float(r.get("of_texture_variance_mean", 0.0)),
+                of_low_texture_roi_count = _int(r.get("of_low_texture_roi_count", 0)),
+                of_wide_lower_roi_count = _int(r.get("of_wide_lower_roi_count", 0)),
+                of_corner_compact_roi_count = _int(r.get("of_corner_compact_roi_count", 0)),
+                of_lower_third_roi_ratio = float(r.get("of_lower_third_roi_ratio", 0.0)),
+                freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
             )
             if det:
                 stage2_fp += 1
