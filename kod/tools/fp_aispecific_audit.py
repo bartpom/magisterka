@@ -50,16 +50,31 @@ def main() -> None:
     fp_ai0 = [r for r in fp_rows if parse_ai_specific(r) == 0]
     fp_ai1 = [r for r in fp_rows if parse_ai_specific(r) == 1]
     fp_broadcast = [r for r in fp_rows if to_int(r.get("broadcast_trap"), 0) == 1]
+    fp_guard_violation = [
+        r for r in fp_rows
+        if parse_ai_specific(r) == 0 and to_int(r.get("detected"), 0) == 1
+    ]
+    fp_lowerthird_ai0 = [
+        r for r in fp_rows
+        if parse_ai_specific(r) == 0 and float(r.get("of_lower_third_roi_ratio", 0.0) or 0.0) > 0.60
+    ]
 
     print(f"adv_fp_trap FP total: {len(fp_rows)}")
     print(f"  with ai_specific=0: {len(fp_ai0)}")
     print(f"  with ai_specific=1: {len(fp_ai1)}")
     print(f"  with broadcast_trap=1: {len(fp_broadcast)}")
+    print(f"  guard violations (detected=1 & ai_specific=0): {len(fp_guard_violation)}")
+    print(f"  lower-third + ai_specific=0: {len(fp_lowerthird_ai0)}")
 
     if fp_ai0:
         print("\nTop FP (ai_specific=0):")
         for r in fp_ai0[:20]:
             print(f"  - {r.get('filename','')} | mode={r.get('fusion_mode','')}")
+
+    if fp_guard_violation:
+        print("\n[WARN] Guard violations found (should be 0):")
+        for r in fp_guard_violation[:20]:
+            print(f"  - {r.get('filename','')} | detected={r.get('detected')} | mode={r.get('fusion_mode','')}")
 
 
 if __name__ == "__main__":

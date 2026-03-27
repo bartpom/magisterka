@@ -443,7 +443,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
         for r in raw_rows:
             gt_val = int(r["ground_truth"])
             cat    = r["category"]
-            det, _, _, _, _ = fuse(
+            det, _, _, ai_specific, _ = fuse(
                 zv_count      = int(r["zv_count"]),
                 zv_lower_third_roi_count = int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = int(r["of_count"]),
@@ -465,6 +465,9 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
                 freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
                 points_threshold = pts_thr,
             )
+            # Twarda reguła bezpieczeństwa: bez sygnału AI-specific nie ma detekcji.
+            if ai_specific == 0:
+                det = 0
             preds.append(det)
             gts.append(gt_val)
             if det == 1 and gt_val == 1: split_tp[cat] = split_tp.get(cat, 0) + 1
@@ -579,6 +582,15 @@ def main() -> None:
                     broadcast_billboard_trap = sig["broadcast_billboard_trap"],
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                 )
+                # Twarda reguła #1 i #2 z tasku naprawczego:
+                # 1) ai_specific=0 -> zawsze brak
+                # 2) lower-third wykryty + ai_specific=0 -> zawsze brak
+                if ai_specific == 0:
+                    det = 0
+                    mode = mode + ";guard_no_ai_specific=1"
+                if sig.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD and ai_specific == 0:
+                    det = 0
+                    mode = mode + ";guard_lowerthird_without_ai=1"
 
                 eval_row = {
                     "category":           category,
