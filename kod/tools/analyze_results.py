@@ -97,7 +97,7 @@ def analyze_fp_stage(
 
         # Sprawdz czy fuse() w ogole daje detekcje (stage 2)
         if _fuse:
-            det, score, mode = _fuse(
+            det, score, mode, *_ = _fuse(
                 zv_count      = _int(r["zv_count"]),
                 zv_lower_third_roi_count = _int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = _int(r["of_count"]),

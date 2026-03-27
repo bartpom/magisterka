@@ -34,6 +34,14 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from advanced_detectors import run_advanced_scan
+from fusion_params import (
+    HF_RATIO_THRESHOLD,
+    LOWER_THIRD_HARD_THRESHOLD,
+    LOW_TEXTURE_THRESHOLD,
+    MAX_AREA_RATIO_THRESHOLD,
+    POINTS_THRESHOLD_DEFAULT,
+    POINTS_THRESHOLD_SWEEP,
+)
 
 DATASET_ROOT = Path(__file__).parent
 RESULTS_BASE = DATASET_ROOT.parent / "results"
@@ -59,7 +67,7 @@ RAW_FIELDS = [
 
 EVAL_FIELDS = [
     "category", "filename", "ground_truth",
-    "detected", "fusion_score", "fusion_mode",
+    "detected", "fusion_score", "fusion_mode", "ai_specific", "broadcast_trap",
     "zv_count", "zv_lower_third_roi_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
     "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
@@ -108,10 +116,10 @@ def copy_to_latest(snap_dir: Path) -> None:
 
 def compute_ai_score(
     row: dict[str, Any],
-    low_texture_threshold: int = 2,
-    hf_ratio_threshold: float = 0.15,
-    max_area_ratio_threshold: float = 0.18,
-    lower_third_hard_threshold: float = 0.60,
+    low_texture_threshold: int = LOW_TEXTURE_THRESHOLD,
+    hf_ratio_threshold: float = HF_RATIO_THRESHOLD,
+    max_area_ratio_threshold: float = MAX_AREA_RATIO_THRESHOLD,
+    lower_third_hard_threshold: float = LOWER_THIRD_HARD_THRESHOLD,
 ) -> int:
     """
     Multi-signal AI score (0..6) wg założeń zadania.
@@ -157,6 +165,19 @@ def compute_ai_score(
     return score
 
 
+def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
+    ai_specific = int(
+        row.get("of_low_texture_roi_count", 0) >= LOW_TEXTURE_THRESHOLD
+        or row.get("freq_hf_ratio_mean", 1.0) < HF_RATIO_THRESHOLD
+        or (bool(row.get("iw_matched")) and row.get("iw_similarity", 0.0) >= 0.85)
+    )
+    broadcast_trap = int(
+        row.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
+        and row.get("zv_lower_third_roi_count", 0) > 0
+    )
+    return ai_specific, broadcast_trap
+
+
 def fuse(
     zv_count: int,
     zv_lower_third_roi_count: int,
@@ -172,8 +193,8 @@ def fuse(
     of_corner_compact_roi_count: int,
     of_lower_third_roi_ratio: float,
     freq_hf_ratio_mean: float,
-    points_threshold: int = 4,
-) -> tuple[int, float, str]:
+    points_threshold: int = POINTS_THRESHOLD_DEFAULT,
+) -> tuple[int, float, str, int, int]:
     row = {
         "zv_count": zv_count,
         "zv_lower_third_roi_count": zv_lower_third_roi_count,
@@ -191,20 +212,12 @@ def fuse(
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
     }
     score = compute_ai_score(row)
-    ai_specific = (
-        row["of_low_texture_roi_count"] >= 2
-        or row["freq_hf_ratio_mean"] < 0.15
-        or (bool(row["iw_matched"]) and row["iw_similarity"] >= 0.85)
-    )
-    broadcast_trap = (
-        row.get("of_lower_third_roi_ratio", 0.0) > 0.60
-        and row.get("zv_lower_third_roi_count", 0) > 0
-    )
+    ai_specific, broadcast_trap = compute_ai_flags(row)
     lower_third_ok = not broadcast_trap
     detected = int(score >= points_threshold and ai_specific and lower_third_ok)
     return detected, float(score), (
         f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)}"
-    )
+    ), int(ai_specific), int(broadcast_trap)
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -351,7 +364,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
     """
     Sweep bez ponownego przetwarzania wideo dla reguly punktowej 3/6.
     """
-    points_thresholds = [3, 4, 5]
+    points_thresholds = POINTS_THRESHOLD_SWEEP
 
     sweep_rows = []
     for pts_thr in points_thresholds:
@@ -364,7 +377,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
         for r in raw_rows:
             gt_val = int(r["ground_truth"])
             cat    = r["category"]
-            det, _, _ = fuse(
+            det, _, _, _, _ = fuse(
                 zv_count      = int(r["zv_count"]),
                 zv_lower_third_roi_count = int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = int(r["of_count"]),
@@ -474,7 +487,7 @@ def main() -> None:
                 }
                 raw_rows.append(raw_row)
 
-                det, score, mode = fuse(
+                det, score, mode, ai_specific, broadcast_trap = fuse(
                     zv_count      = sig["zv_count"],
                     zv_lower_third_roi_count = sig["zv_lower_third_roi_count"],
                     of_count      = sig["of_count"],
@@ -498,6 +511,8 @@ def main() -> None:
                     "detected":           det,
                     "fusion_score":       score,
                     "fusion_mode":        mode,
+                    "ai_specific":        ai_specific,
+                    "broadcast_trap":     broadcast_trap,
                     "zv_count":           sig["zv_count"],
                     "zv_lower_third_roi_count": sig["zv_lower_third_roi_count"],
                     "of_count":           sig["of_count"],
