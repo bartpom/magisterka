@@ -49,10 +49,12 @@ def main() -> None:
 
     fp_ai0 = [r for r in fp_rows if parse_ai_specific(r) == 0]
     fp_ai1 = [r for r in fp_rows if parse_ai_specific(r) == 1]
+    fp_broadcast = [r for r in fp_rows if to_int(r.get("broadcast_trap"), 0) == 1]
 
     print(f"adv_fp_trap FP total: {len(fp_rows)}")
     print(f"  with ai_specific=0: {len(fp_ai0)}")
     print(f"  with ai_specific=1: {len(fp_ai1)}")
+    print(f"  with broadcast_trap=1: {len(fp_broadcast)}")
 
     if fp_ai0:
         print("\nTop FP (ai_specific=0):")
