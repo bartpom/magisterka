@@ -99,6 +99,7 @@ def analyze_fp_stage(
         if _fuse:
             det, score, mode = _fuse(
                 zv_count      = _int(r["zv_count"]),
+                zv_lower_third_roi_count = _int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = _int(r["of_count"]),
                 of_max_area   = float(r.get("of_max_area", 0.0)),
                 of_max_area_ratio = float(r.get("of_max_area_ratio", 0.0)),

@@ -48,7 +48,7 @@ CATEGORIES = {
 
 RAW_FIELDS = [
     "category", "filename", "ground_truth",
-    "zv_count", "zv_max_score",
+    "zv_count", "zv_max_score", "zv_lower_third_roi_count",
     "of_count", "of_max_area", "of_max_area_ratio", "of_global_motion",
     "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
@@ -60,7 +60,7 @@ RAW_FIELDS = [
 EVAL_FIELDS = [
     "category", "filename", "ground_truth",
     "detected", "fusion_score", "fusion_mode",
-    "zv_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
+    "zv_count", "zv_lower_third_roi_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
     "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
     "freq_hf_ratio_mean", "duration_s",
@@ -126,6 +126,7 @@ def compute_ai_score(
     wide_lower = int(row.get("of_wide_lower_roi_count", 0))
     corner_compact = int(row.get("of_corner_compact_roi_count", 0))
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
+    zv_lower_third = int(row.get("zv_lower_third_roi_count", 0))
 
     # Signal 1: OF obecny i niezdominowany przez gigantyczny overlay.
     if of_count >= 5:
@@ -150,14 +151,15 @@ def compute_ai_score(
         score -= 2
     if corner_compact >= 1:
         score += 1
-    # Hard broadcast-trap heuristic: wiekszosc konturow w dolnej 1/3 kadru.
-    if lower_third_ratio > lower_third_hard_threshold:
+    # Hard broadcast-trap heuristic: dolny-dominujacy OF + statyczne ROI na dole.
+    if lower_third_ratio > lower_third_hard_threshold and zv_lower_third > 0:
         score -= 3
     return score
 
 
 def fuse(
     zv_count: int,
+    zv_lower_third_roi_count: int,
     of_count: int,
     of_max_area: float,
     of_max_area_ratio: float,
@@ -174,6 +176,7 @@ def fuse(
 ) -> tuple[int, float, str]:
     row = {
         "zv_count": zv_count,
+        "zv_lower_third_roi_count": zv_lower_third_roi_count,
         "of_count": of_count,
         "of_max_area": of_max_area,
         "of_max_area_ratio": of_max_area_ratio,
@@ -193,7 +196,11 @@ def fuse(
         or row["freq_hf_ratio_mean"] < 0.15
         or (bool(row["iw_matched"]) and row["iw_similarity"] >= 0.85)
     )
-    lower_third_ok = row.get("of_lower_third_roi_ratio", 0.0) <= 0.60
+    broadcast_trap = (
+        row.get("of_lower_third_roi_ratio", 0.0) > 0.60
+        and row.get("zv_lower_third_roi_count", 0) > 0
+    )
+    lower_third_ok = not broadcast_trap
     detected = int(score >= points_threshold and ai_specific and lower_third_ok)
     return detected, float(score), (
         f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)}"
@@ -232,6 +239,10 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
 
     zv_count     = len(zv_rois)
     zv_max_score = max((r.get("score", 0.0) for r in zv_rois), default=0.0)
+    zv_lower_third_roi_count = sum(
+        1 for r in zv_rois
+        if r.get("name") in {"CORNER-BL", "CORNER-BR"}
+    )
     of_count     = len(of_rois)
     of_max_area  = max((r.get("area",  0)   for r in of_rois), default=0)
     of_max_area_ratio = max((float(r.get("area_ratio", 0.0)) for r in of_rois), default=0.0)
@@ -276,6 +287,7 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "zv_count":           zv_count,
         "zv_max_score":       round(zv_max_score,  4),
+        "zv_lower_third_roi_count": zv_lower_third_roi_count,
         "of_count":           of_count,
         "of_max_area":        of_max_area,
         "of_max_area_ratio":  round(of_max_area_ratio, 6),
@@ -354,6 +366,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
             cat    = r["category"]
             det, _, _ = fuse(
                 zv_count      = int(r["zv_count"]),
+                zv_lower_third_roi_count = int(r.get("zv_lower_third_roi_count", 0)),
                 of_count      = int(r["of_count"]),
                 of_max_area   = float(r.get("of_max_area", 0.0)),
                 of_max_area_ratio = float(r.get("of_max_area_ratio", 0.0)),
@@ -463,6 +476,7 @@ def main() -> None:
 
                 det, score, mode = fuse(
                     zv_count      = sig["zv_count"],
+                    zv_lower_third_roi_count = sig["zv_lower_third_roi_count"],
                     of_count      = sig["of_count"],
                     of_max_area   = sig["of_max_area"],
                     of_max_area_ratio = sig["of_max_area_ratio"],
@@ -485,6 +499,7 @@ def main() -> None:
                     "fusion_score":       score,
                     "fusion_mode":        mode,
                     "zv_count":           sig["zv_count"],
+                    "zv_lower_third_roi_count": sig["zv_lower_third_roi_count"],
                     "of_count":           sig["of_count"],
                     "of_max_area_ratio":  sig["of_max_area_ratio"],
                     "iw_best_similarity": sig["iw_best_similarity"],
