@@ -306,6 +306,57 @@ def detect_optical_flow_overlay(
     return results
 
 
+def detect_broadcast_trap_patterns(
+    of_rois: List[Dict[str, Any]],
+    zv_rois: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Heurystyki pułapek broadcast:
+    - lower_third_anim: szeroki pas w dolnej części kadru (często lower-third)
+    - scoreboard_top_pair: jednoczesne sygnały top-left + top-right
+    - billboard_center_large: duży, centralny prostokątny overlay
+    """
+    if not of_rois:
+        return {
+            "broadcast_trap": False,
+            "lower_third_anim": False,
+            "scoreboard_top_pair": False,
+            "billboard_center_large": False,
+        }
+
+    lower_third_anim = sum(
+        1 for r in of_rois
+        if float(r.get("cy_rel", 0.0)) >= 0.75
+        and float(r.get("height_ratio", 1.0)) <= 0.25
+        and float(r.get("width_ratio", 0.0)) >= 0.60
+    ) >= 1
+
+    has_tl = any(
+        float(r.get("cx_rel", 1.0)) <= 0.30 and float(r.get("cy_rel", 1.0)) <= 0.30
+        for r in of_rois
+    ) or any(z.get("name") == "CORNER-TL" for z in zv_rois)
+    has_tr = any(
+        float(r.get("cx_rel", 0.0)) >= 0.70 and float(r.get("cy_rel", 1.0)) <= 0.30
+        for r in of_rois
+    ) or any(z.get("name") == "CORNER-TR" for z in zv_rois)
+    scoreboard_top_pair = has_tl and has_tr
+
+    billboard_center_large = any(
+        0.30 <= float(r.get("cx_rel", 0.0)) <= 0.70
+        and 0.30 <= float(r.get("cy_rel", 0.0)) <= 0.70
+        and float(r.get("area_ratio", 0.0)) >= 0.12
+        for r in of_rois
+    )
+
+    broadcast_trap = lower_third_anim or scoreboard_top_pair or billboard_center_large
+    return {
+        "broadcast_trap": broadcast_trap,
+        "lower_third_anim": lower_third_anim,
+        "scoreboard_top_pair": scoreboard_top_pair,
+        "billboard_center_large": billboard_center_large,
+    }
+
+
 # ---------------------------------------------------------------------------
 # 2. INVISIBLE WATERMARK (imwatermark / DWT / RivaGAN)
 # ---------------------------------------------------------------------------
@@ -561,6 +612,12 @@ def run_advanced_scan(
         "overlay_diff": None,
         "zero_variance_rois": [],
         "optical_flow_rois": [],
+        "broadcast_traps": {
+            "broadcast_trap": False,
+            "lower_third_anim": False,
+            "scoreboard_top_pair": False,
+            "billboard_center_large": False,
+        },
         "invisible_wm": {"found": False},
         "fft_artifacts": {"found": False},
         "summary": ""
@@ -639,6 +696,34 @@ def run_advanced_scan(
             _log(f"[ADV] FFT hf_ratio_mean={fft_res.get('freq_hf_ratio_mean', 0.0):.4f}")
         except Exception as e:
             _log(f"[ADV] Blad FFT: {e}")
+
+    try:
+        trap_flags = detect_broadcast_trap_patterns(
+            result.get("optical_flow_rois", []),
+            result.get("zero_variance_rois", []),
+        )
+        result["broadcast_traps"] = trap_flags
+        if trap_flags.get("broadcast_trap"):
+            # Hard gate: przy trapie broadcast nie licz konturow center jako sygnalu AI.
+            of_rois = result.get("optical_flow_rois", [])
+            filtered_rois = [
+                r for r in of_rois
+                if not (
+                    0.30 <= float(r.get("cx_rel", 0.0)) <= 0.70
+                    and 0.30 <= float(r.get("cy_rel", 0.0)) <= 0.70
+                )
+            ]
+            suppressed = len(of_rois) - len(filtered_rois)
+            result["optical_flow_rois"] = filtered_rois
+            _log(
+                "[ADV] Broadcast trap detected: "
+                f"lower_third={int(trap_flags.get('lower_third_anim', False))}, "
+                f"scoreboard={int(trap_flags.get('scoreboard_top_pair', False))}, "
+                f"billboard={int(trap_flags.get('billboard_center_large', False))}, "
+                f"suppressed_center_rois={suppressed}"
+            )
+    except Exception as e:
+        _log(f"[ADV] Blad broadcast trap patterns: {e}")
 
     findings = []
     if result["zero_variance_rois"]:

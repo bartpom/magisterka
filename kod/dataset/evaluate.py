@@ -67,6 +67,7 @@ RAW_FIELDS = [
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
     "of_upper_third_roi_ratio", "of_center_roi_ratio", "of_wide_top_bottom_count",
     "broadcast_scoreboard_trap", "broadcast_billboard_trap",
+    "broadcast_pattern_trap", "broadcast_lower_third_pattern", "broadcast_scoreboard_pattern", "broadcast_billboard_pattern",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
     "frames_sampled", "duration_s", "detector_version",
@@ -80,6 +81,7 @@ EVAL_FIELDS = [
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
     "of_upper_third_roi_ratio", "of_center_roi_ratio", "of_wide_top_bottom_count",
     "broadcast_scoreboard_trap", "broadcast_billboard_trap",
+    "broadcast_pattern_trap", "broadcast_lower_third_pattern", "broadcast_scoreboard_pattern", "broadcast_billboard_pattern",
     "freq_hf_ratio_mean", "duration_s",
 ]
 
@@ -134,6 +136,8 @@ def compute_ai_score(
     Multi-signal AI score (0..6) wg założeń zadania.
     """
     score = 0
+    if int(row.get("broadcast_pattern_trap", 0)) == 1:
+        return 0
 
     of_count = int(row.get("of_count", 0))
     area_ratio = float(row.get("of_max_area_ratio", 1.0))
@@ -185,9 +189,12 @@ def compute_ai_score(
 
 def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
     ai_specific = int(
-        row.get("of_low_texture_roi_count", 0) >= LOW_TEXTURE_THRESHOLD
-        or row.get("freq_hf_ratio_mean", 1.0) < HF_RATIO_THRESHOLD
-        or (bool(row.get("iw_matched")) and row.get("iw_similarity", 0.0) >= 0.85)
+        (bool(row.get("iw_matched")) and row.get("iw_similarity", 0.0) >= 0.85)
+        or (
+            row.get("of_low_texture_roi_count", 0) >= LOW_TEXTURE_THRESHOLD
+            and row.get("freq_hf_ratio_mean", 1.0) < HF_RATIO_THRESHOLD
+            and row.get("of_corner_compact_roi_count", 0) >= 1
+        )
     )
     lower_third_trap = int(
         row.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
@@ -196,7 +203,8 @@ def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
     )
     scoreboard_trap = int(row.get("broadcast_scoreboard_trap", 0))
     billboard_trap = int(row.get("broadcast_billboard_trap", 0))
-    broadcast_trap = int(lower_third_trap or scoreboard_trap or billboard_trap)
+    pattern_trap = int(row.get("broadcast_pattern_trap", 0))
+    broadcast_trap = int(lower_third_trap or scoreboard_trap or billboard_trap or pattern_trap)
     if broadcast_trap:
         ai_specific = 0
     return ai_specific, broadcast_trap
@@ -221,6 +229,10 @@ def fuse(
     of_wide_top_bottom_count: int,
     broadcast_scoreboard_trap: int,
     broadcast_billboard_trap: int,
+    broadcast_pattern_trap: int,
+    broadcast_lower_third_pattern: int,
+    broadcast_scoreboard_pattern: int,
+    broadcast_billboard_pattern: int,
     freq_hf_ratio_mean: float,
     points_threshold: int = POINTS_THRESHOLD_DEFAULT,
 ) -> tuple[int, float, str, int, int]:
@@ -243,10 +255,16 @@ def fuse(
         "of_wide_top_bottom_count": of_wide_top_bottom_count,
         "broadcast_scoreboard_trap": broadcast_scoreboard_trap,
         "broadcast_billboard_trap": broadcast_billboard_trap,
+        "broadcast_pattern_trap": broadcast_pattern_trap,
+        "broadcast_lower_third_pattern": broadcast_lower_third_pattern,
+        "broadcast_scoreboard_pattern": broadcast_scoreboard_pattern,
+        "broadcast_billboard_pattern": broadcast_billboard_pattern,
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
     }
     score = compute_ai_score(row)
     ai_specific, broadcast_trap = compute_ai_flags(row)
+    if broadcast_trap:
+        score = 0
     lower_third_ok = not broadcast_trap
     detected = int(score >= points_threshold and ai_specific and lower_third_ok)
     return detected, float(score), (
@@ -283,6 +301,7 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
     of_rois  = result.get("optical_flow_rois",  [])
     iw_data  = result.get("invisible_wm",       {})
     fft_data = result.get("fft_artifacts",      {})
+    trap_data = result.get("broadcast_traps",   {})
 
     zv_count     = len(zv_rois)
     zv_max_score = max((r.get("score", 0.0) for r in zv_rois), default=0.0)
@@ -357,6 +376,10 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         and of_texture_variance_mean >= BILLBOARD_TEXTURE_MIN
         and of_low_texture_roi_count == 0
     )
+    broadcast_pattern_trap = int(trap_data.get("broadcast_trap", False))
+    broadcast_lower_third_pattern = int(trap_data.get("lower_third_anim", False))
+    broadcast_scoreboard_pattern = int(trap_data.get("scoreboard_top_pair", False))
+    broadcast_billboard_pattern = int(trap_data.get("billboard_center_large", False))
 
     return {
         "zv_count":           zv_count,
@@ -376,6 +399,10 @@ def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
         "of_wide_top_bottom_count": of_wide_top_bottom_count,
         "broadcast_scoreboard_trap": broadcast_scoreboard_trap,
         "broadcast_billboard_trap": broadcast_billboard_trap,
+        "broadcast_pattern_trap": broadcast_pattern_trap,
+        "broadcast_lower_third_pattern": broadcast_lower_third_pattern,
+        "broadcast_scoreboard_pattern": broadcast_scoreboard_pattern,
+        "broadcast_billboard_pattern": broadcast_billboard_pattern,
         "iw_found":           iw_found,
         "iw_best_similarity": round(iw_similarity, 4),
         "iw_matched":         iw_matched,
@@ -462,6 +489,10 @@ def run_threshold_sweep(raw_rows: list[dict]) -> list[dict]:
                 of_wide_top_bottom_count = int(r.get("of_wide_top_bottom_count", 0)),
                 broadcast_scoreboard_trap = int(r.get("broadcast_scoreboard_trap", 0)),
                 broadcast_billboard_trap = int(r.get("broadcast_billboard_trap", 0)),
+                broadcast_pattern_trap = int(r.get("broadcast_pattern_trap", 0)),
+                broadcast_lower_third_pattern = int(r.get("broadcast_lower_third_pattern", 0)),
+                broadcast_scoreboard_pattern = int(r.get("broadcast_scoreboard_pattern", 0)),
+                broadcast_billboard_pattern = int(r.get("broadcast_billboard_pattern", 0)),
                 freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
                 points_threshold = pts_thr,
             )
@@ -580,6 +611,10 @@ def main() -> None:
                     of_wide_top_bottom_count = sig["of_wide_top_bottom_count"],
                     broadcast_scoreboard_trap = sig["broadcast_scoreboard_trap"],
                     broadcast_billboard_trap = sig["broadcast_billboard_trap"],
+                    broadcast_pattern_trap = sig["broadcast_pattern_trap"],
+                    broadcast_lower_third_pattern = sig["broadcast_lower_third_pattern"],
+                    broadcast_scoreboard_pattern = sig["broadcast_scoreboard_pattern"],
+                    broadcast_billboard_pattern = sig["broadcast_billboard_pattern"],
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                 )
                 # Twarda reguła #1 i #2 z tasku naprawczego:
@@ -618,6 +653,10 @@ def main() -> None:
                     "of_wide_top_bottom_count": sig["of_wide_top_bottom_count"],
                     "broadcast_scoreboard_trap": sig["broadcast_scoreboard_trap"],
                     "broadcast_billboard_trap": sig["broadcast_billboard_trap"],
+                    "broadcast_pattern_trap": sig["broadcast_pattern_trap"],
+                    "broadcast_lower_third_pattern": sig["broadcast_lower_third_pattern"],
+                    "broadcast_scoreboard_pattern": sig["broadcast_scoreboard_pattern"],
+                    "broadcast_billboard_pattern": sig["broadcast_billboard_pattern"],
                     "freq_hf_ratio_mean": sig["freq_hf_ratio_mean"],
                     "duration_s":         f"{elapsed:.2f}",
                 }

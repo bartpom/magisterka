@@ -116,6 +116,10 @@ def analyze_fp_stage(
                 of_wide_top_bottom_count = _int(r.get("of_wide_top_bottom_count", 0)),
                 broadcast_scoreboard_trap = _int(r.get("broadcast_scoreboard_trap", 0)),
                 broadcast_billboard_trap = _int(r.get("broadcast_billboard_trap", 0)),
+                broadcast_pattern_trap = _int(r.get("broadcast_pattern_trap", 0)),
+                broadcast_lower_third_pattern = _int(r.get("broadcast_lower_third_pattern", 0)),
+                broadcast_scoreboard_pattern = _int(r.get("broadcast_scoreboard_pattern", 0)),
+                broadcast_billboard_pattern = _int(r.get("broadcast_billboard_pattern", 0)),
                 freq_hf_ratio_mean = float(r.get("freq_hf_ratio_mean", 0.0)),
             )
             if det:

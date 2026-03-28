@@ -50,6 +50,7 @@ def main() -> None:
     fp_ai0 = [r for r in fp_rows if parse_ai_specific(r) == 0]
     fp_ai1 = [r for r in fp_rows if parse_ai_specific(r) == 1]
     fp_broadcast = [r for r in fp_rows if to_int(r.get("broadcast_trap"), 0) == 1]
+    fp_pattern_trap = [r for r in fp_rows if to_int(r.get("broadcast_pattern_trap"), 0) == 1]
     fp_guard_violation = [
         r for r in fp_rows
         if parse_ai_specific(r) == 0 and to_int(r.get("detected"), 0) == 1
@@ -63,6 +64,7 @@ def main() -> None:
     print(f"  with ai_specific=0: {len(fp_ai0)}")
     print(f"  with ai_specific=1: {len(fp_ai1)}")
     print(f"  with broadcast_trap=1: {len(fp_broadcast)}")
+    print(f"  with broadcast_pattern_trap=1: {len(fp_pattern_trap)}")
     print(f"  guard violations (detected=1 & ai_specific=0): {len(fp_guard_violation)}")
     print(f"  lower-third + ai_specific=0: {len(fp_lowerthird_ai0)}")
 
