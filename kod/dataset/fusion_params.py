@@ -4,7 +4,7 @@ Cel: ograniczyć konflikty przy kolejnych PR-ach. Strojenie progów odbywa się 
 bez ciągłego edytowania `evaluate.py`.
 """
 
-LOW_TEXTURE_THRESHOLD = 2
+LOW_TEXTURE_THRESHOLD = 1
 HF_RATIO_THRESHOLD = 0.15
 MAX_AREA_RATIO_THRESHOLD = 0.18
 LOWER_THIRD_HARD_THRESHOLD = 0.60

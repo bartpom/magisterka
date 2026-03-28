@@ -332,11 +332,17 @@ def detect_broadcast_trap_patterns(
     ) >= 1
 
     has_tl = any(
-        float(r.get("cx_rel", 1.0)) <= 0.30 and float(r.get("cy_rel", 1.0)) <= 0.30
+        float(r.get("cx_rel", 1.0)) <= 0.40
+        and float(r.get("cy_rel", 1.0)) <= 0.30
+        and float(r.get("width_ratio", 0.0)) >= 0.10
+        and float(r.get("area_ratio", 0.0)) >= 0.003
         for r in of_rois
     ) or any(z.get("name") == "CORNER-TL" for z in zv_rois)
     has_tr = any(
-        float(r.get("cx_rel", 0.0)) >= 0.70 and float(r.get("cy_rel", 1.0)) <= 0.30
+        float(r.get("cx_rel", 0.0)) >= 0.60
+        and float(r.get("cy_rel", 1.0)) <= 0.30
+        and float(r.get("width_ratio", 0.0)) >= 0.10
+        and float(r.get("area_ratio", 0.0)) >= 0.003
         for r in of_rois
     ) or any(z.get("name") == "CORNER-TR" for z in zv_rois)
     scoreboard_top_pair = has_tl and has_tr
@@ -703,8 +709,9 @@ def run_advanced_scan(
             result.get("zero_variance_rois", []),
         )
         result["broadcast_traps"] = trap_flags
-        if trap_flags.get("broadcast_trap"):
-            # Hard gate: przy trapie broadcast nie licz konturow center jako sygnalu AI.
+        if trap_flags.get("billboard_center_large"):
+            # Center suppression tylko dla wzorca billboardowego.
+            # Dla scoreboard/lower-third ta operacja zbyt często obniżała TPR na AI.
             of_rois = result.get("optical_flow_rois", [])
             filtered_rois = [
                 r for r in of_rois
@@ -716,7 +723,7 @@ def run_advanced_scan(
             suppressed = len(of_rois) - len(filtered_rois)
             result["optical_flow_rois"] = filtered_rois
             _log(
-                "[ADV] Broadcast trap detected: "
+                "[ADV] Billboard trap detected: "
                 f"lower_third={int(trap_flags.get('lower_third_anim', False))}, "
                 f"scoreboard={int(trap_flags.get('scoreboard_top_pair', False))}, "
                 f"billboard={int(trap_flags.get('billboard_center_large', False))}, "

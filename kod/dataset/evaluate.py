@@ -136,9 +136,6 @@ def compute_ai_score(
     Multi-signal AI score (0..6) wg założeń zadania.
     """
     score = 0
-    if int(row.get("broadcast_pattern_trap", 0)) == 1:
-        return 0
-
     of_count = int(row.get("of_count", 0))
     area_ratio = float(row.get("of_max_area_ratio", 1.0))
     low_texture = int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold
@@ -184,18 +181,20 @@ def compute_ai_score(
         score -= 3
     if int(row.get("broadcast_billboard_trap", 0)) == 1:
         score -= 2
+    if int(row.get("broadcast_pattern_trap", 0)) == 1:
+        score -= 2
     return score
 
 
 def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
-    ai_specific = int(
-        (bool(row.get("iw_matched")) and row.get("iw_similarity", 0.0) >= 0.85)
-        or (
-            row.get("of_low_texture_roi_count", 0) >= LOW_TEXTURE_THRESHOLD
-            and row.get("freq_hf_ratio_mean", 1.0) < HF_RATIO_THRESHOLD
-            and row.get("of_corner_compact_roi_count", 0) >= 1
-        )
-    )
+    iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+    ai_signals = [
+        int(row.get("of_low_texture_roi_count", 0)) >= LOW_TEXTURE_THRESHOLD,
+        float(row.get("freq_hf_ratio_mean", 1.0)) < HF_RATIO_THRESHOLD,
+        int(row.get("of_corner_compact_roi_count", 0)) >= 1,
+        int(row.get("of_count", 0)) >= 3,
+    ]
+    ai_specific = int(iw_strong or sum(ai_signals) >= 2)
     lower_third_trap = int(
         row.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
         and row.get("of_upper_third_roi_ratio", 1.0) < LOWER_THIRD_HARD_UPPER_MAX
@@ -204,7 +203,10 @@ def compute_ai_flags(row: dict[str, Any]) -> tuple[int, int]:
     scoreboard_trap = int(row.get("broadcast_scoreboard_trap", 0))
     billboard_trap = int(row.get("broadcast_billboard_trap", 0))
     pattern_trap = int(row.get("broadcast_pattern_trap", 0))
-    broadcast_trap = int(lower_third_trap or scoreboard_trap or billboard_trap or pattern_trap)
+    # Pattern trap bywa nadwrażliwy (np. krótkie klipy AI z overlayami YouTube),
+    # więc traktujemy go jako sygnał pomocniczy, nie samodzielny hard gate.
+    pattern_confirmed = int(pattern_trap and (scoreboard_trap or billboard_trap or lower_third_trap))
+    broadcast_trap = int(lower_third_trap or scoreboard_trap or billboard_trap or pattern_confirmed)
     if broadcast_trap:
         ai_specific = 0
     return ai_specific, broadcast_trap
@@ -263,10 +265,8 @@ def fuse(
     }
     score = compute_ai_score(row)
     ai_specific, broadcast_trap = compute_ai_flags(row)
-    if broadcast_trap:
-        score = 0
     lower_third_ok = not broadcast_trap
-    detected = int(score >= points_threshold and ai_specific and lower_third_ok)
+    detected = int(score >= points_threshold and lower_third_ok)
     return detected, float(score), (
         f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)}"
     ), int(ai_specific), int(broadcast_trap)
