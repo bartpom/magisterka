@@ -22,6 +22,7 @@ Kategorie:
 
 from __future__ import annotations
 import csv
+import json
 import shutil
 import subprocess
 import sys
@@ -33,11 +34,34 @@ from statistics import mean
 import cv2
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from advanced_detectors import run_advanced_scan
+from advanced_detectors import initialize_invisible_watermark, run_advanced_scan
+try:
+    from c2pa_detector import detect_c2pa  # type: ignore
+except Exception:
+    detect_c2pa = None
 from fusion_params import (
     BILLBOARD_CENTER_RATIO_MIN,
     BILLBOARD_GLOBAL_MOTION_MIN,
     BILLBOARD_TEXTURE_MIN,
+    BROADCAST_SOFT_BILLBOARD_OF_COUNT_MIN,
+    BROADCAST_SOFT_BILLBOARD_TEXTURE_VAR_MIN,
+    BROADCAST_SOFT_BILLBOARD_UPPER_RATIO_MAX,
+    BROADCAST_SOFT_LOWERTHIRD_RATIO_MIN,
+    BROADCAST_SOFT_SCOREBOARD_CENTER_RATIO_MAX,
+    BROADCAST_SOFT_SCOREBOARD_LOWER_RATIO_MIN,
+    BROADCAST_SOFT_SCOREBOARD_OF_COUNT_MIN,
+    BROADCAST_SOFT_SCOREBOARD_UPPER_RATIO_MIN,
+    CROPPED_OF_RECOVERY_BONUS_POINTS,
+    CROPPED_OF_RECOVERY_MAX_AREA_RATIO,
+    CROPPED_OF_RECOVERY_MAX_CENTER_RATIO,
+    CROPPED_OF_RECOVERY_MAX_LOWER_RATIO,
+    CROPPED_OF_RECOVERY_MIN_LOW_TEXTURE_SHARE,
+    CROPPED_OF_RECOVERY_MIN_OF_COUNT,
+    CLEAN_AI_HF_THRESHOLD,
+    CLEAN_AI_MAX_AREA_RATIO,
+    ENABLE_CROPPED_OF_RECOVERY,
+    ENABLE_BROADCAST_SOFT_GUARD,
+    ENABLE_CLEAN_AI_RESCUE,
     HF_RATIO_THRESHOLD_SWEEP,
     HF_RATIO_THRESHOLD,
     LOW_TEXTURE_THRESHOLD_SWEEP,
@@ -72,6 +96,7 @@ RAW_FIELDS = [
     "broadcast_pattern_trap", "broadcast_lower_third_pattern", "broadcast_scoreboard_pattern", "broadcast_billboard_pattern",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
+    "c2pa_found", "c2pa_ai", "c2pa_generator", "c2pa_error",
     "frames_sampled", "duration_s", "detector_version",
 ]
 
@@ -84,7 +109,7 @@ EVAL_FIELDS = [
     "of_upper_third_roi_ratio", "of_center_roi_ratio", "of_wide_top_bottom_count",
     "broadcast_scoreboard_trap", "broadcast_billboard_trap",
     "broadcast_pattern_trap", "broadcast_lower_third_pattern", "broadcast_scoreboard_pattern", "broadcast_billboard_pattern",
-    "freq_hf_ratio_mean", "duration_s",
+    "freq_hf_ratio_mean", "c2pa_found", "c2pa_ai", "c2pa_generator", "duration_s",
 ]
 
 DETECTOR_VERSION = "adv_v6_hf_texture_sweep"
@@ -123,6 +148,75 @@ def copy_to_latest(snap_dir: Path) -> None:
     shutil.copytree(snap_dir, latest)
 
 
+C2PA_AI_ORIGIN_KEYWORDS = (
+    "openai",
+    "sora",
+    "runway",
+    "adobe firefly",
+    "firefly",
+    "luma",
+    "pika",
+    "kling",
+    "hailuo",
+    "stable video",
+    "cogvideo",
+    "generative ai",
+    "ai generated",
+    "synthetic media",
+)
+
+
+def detect_c2pa_signal(video_path: Path) -> dict[str, Any]:
+    """
+    C2PA check nigdy nie blokuje skanu:
+    - found+ai_origin => c2pa_ai=1
+    - brak/blad => c2pa_ai=0
+    """
+    default = {
+        "c2pa_found": 0,
+        "c2pa_ai": 0,
+        "c2pa_generator": "",
+        "c2pa_error": "",
+    }
+    if detect_c2pa is None:
+        print("ADV C2PA: not found")
+        return default
+
+    try:
+        res = detect_c2pa(str(video_path))
+    except Exception as e:
+        print("ADV C2PA: not found")
+        default["c2pa_error"] = str(e)
+        return default
+
+    if not getattr(res, "found", False):
+        print("ADV C2PA: not found")
+        err = getattr(res, "error", None)
+        if err:
+            default["c2pa_error"] = str(err)
+        return default
+
+    generator = str(getattr(res, "generator", "") or "")
+    producer = str(getattr(res, "producer", "") or "")
+    manifest_blob = ""
+    raw_manifest = getattr(res, "raw_manifest", None)
+    if raw_manifest:
+        try:
+            manifest_blob = json.dumps(raw_manifest, ensure_ascii=False).lower()
+        except Exception:
+            manifest_blob = str(raw_manifest).lower()
+
+    claim_blob = " ".join((generator.lower(), producer.lower(), manifest_blob))
+    ai_origin = int(any(k in claim_blob for k in C2PA_AI_ORIGIN_KEYWORDS))
+    print(f"ADV C2PA: found, ai_origin={ai_origin}")
+    return {
+        "c2pa_found": 1,
+        "c2pa_ai": ai_origin,
+        "c2pa_generator": generator,
+        "c2pa_error": str(getattr(res, "error", "") or ""),
+    }
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Fuzja sygnalow
 # ───────────────────────────────────────────────────────────────────────
@@ -143,6 +237,7 @@ def compute_ai_score(
     low_texture = int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold
     low_hf = float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold
     iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+    c2pa_ai = int(row.get("c2pa_ai", 0)) == 1
     wide_lower = int(row.get("of_wide_lower_roi_count", 0))
     corner_compact = int(row.get("of_corner_compact_roi_count", 0))
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
@@ -171,6 +266,8 @@ def compute_ai_score(
         score += 1
     if iw_strong:
         score += 2
+    if c2pa_ai:
+        score += 2
     # Geometry-aware refinements:
     if wide_lower >= 1:
         score -= 2
@@ -195,6 +292,21 @@ def compute_ai_score(
         and corner_compact == 0
     ):
         score -= 1
+    # Cropping can remove corner anchors and shift OF ROI zones; recover one point
+    # using position-agnostic OF/texture cues when the overlay footprint is compact.
+    low_texture_share = (
+        float(int(row.get("of_low_texture_roi_count", 0))) / float(max(of_count, 1))
+    )
+    if (
+        ENABLE_CROPPED_OF_RECOVERY
+        and of_count >= CROPPED_OF_RECOVERY_MIN_OF_COUNT
+        and area_ratio <= CROPPED_OF_RECOVERY_MAX_AREA_RATIO
+        and lower_third_ratio <= CROPPED_OF_RECOVERY_MAX_LOWER_RATIO
+        and float(row.get("of_center_roi_ratio", 0.0)) <= CROPPED_OF_RECOVERY_MAX_CENTER_RATIO
+        and wide_lower == 0
+        and low_texture_share >= CROPPED_OF_RECOVERY_MIN_LOW_TEXTURE_SHARE
+    ):
+        score += CROPPED_OF_RECOVERY_BONUS_POINTS
     return score
 
 
@@ -216,19 +328,53 @@ def compute_ai_flags(
         int(row.get("of_count", 0)) >= 3
         and float(row.get("of_max_area_ratio", 1.0)) < max_area_ratio_threshold,
     ]
-    ai_specific = int(iw_strong or sum(ai_signals) >= 2)
+    c2pa_ai = int(row.get("c2pa_ai", 0)) == 1
+    ai_specific = int(iw_strong or c2pa_ai or sum(ai_signals) >= 2)
+    lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
+    upper_third_ratio = float(row.get("of_upper_third_roi_ratio", 1.0))
+    center_ratio = float(row.get("of_center_roi_ratio", 0.0))
+    of_count = int(row.get("of_count", 0))
+    texture_var = float(row.get("of_texture_variance_mean", 0.0))
     lower_third_trap = int(
-        row.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
-        and row.get("of_upper_third_roi_ratio", 1.0) < LOWER_THIRD_HARD_UPPER_MAX
+        lower_third_ratio > LOWER_THIRD_HARD_THRESHOLD
+        and upper_third_ratio < LOWER_THIRD_HARD_UPPER_MAX
         and row.get("zv_lower_third_roi_count", 0) > 0
     )
     scoreboard_trap = int(row.get("broadcast_scoreboard_trap", 0))
     billboard_trap = int(row.get("broadcast_billboard_trap", 0))
     pattern_trap = int(row.get("broadcast_pattern_trap", 0))
+    scoreboard_soft = int(
+        scoreboard_trap
+        or (
+            lower_third_ratio >= BROADCAST_SOFT_SCOREBOARD_LOWER_RATIO_MIN
+            and upper_third_ratio >= BROADCAST_SOFT_SCOREBOARD_UPPER_RATIO_MIN
+            and center_ratio <= BROADCAST_SOFT_SCOREBOARD_CENTER_RATIO_MAX
+            and of_count >= BROADCAST_SOFT_SCOREBOARD_OF_COUNT_MIN
+        )
+    )
+    billboard_soft = int(
+        billboard_trap
+        or (
+            texture_var >= BROADCAST_SOFT_BILLBOARD_TEXTURE_VAR_MIN
+            and upper_third_ratio <= BROADCAST_SOFT_BILLBOARD_UPPER_RATIO_MAX
+            and of_count >= BROADCAST_SOFT_BILLBOARD_OF_COUNT_MIN
+        )
+    )
+    lower_third_soft = int(lower_third_ratio >= BROADCAST_SOFT_LOWERTHIRD_RATIO_MIN)
     # Pattern trap bywa nadwrażliwy (np. krótkie klipy AI z overlayami YouTube),
     # więc traktujemy go jako sygnał pomocniczy, nie samodzielny hard gate.
     pattern_confirmed = int(pattern_trap and (scoreboard_trap or billboard_trap or lower_third_trap))
-    broadcast_trap = int(lower_third_trap or scoreboard_trap or billboard_trap or pattern_confirmed)
+    soft_broadcast_guard = int(
+        ENABLE_BROADCAST_SOFT_GUARD
+        and (scoreboard_soft or (billboard_soft and lower_third_soft))
+    )
+    broadcast_trap = int(
+        lower_third_trap
+        or scoreboard_trap
+        or billboard_trap
+        or pattern_confirmed
+        or soft_broadcast_guard
+    )
     if broadcast_trap:
         ai_specific = 0
     return ai_specific, broadcast_trap
@@ -258,6 +404,7 @@ def fuse(
     broadcast_scoreboard_pattern: int,
     broadcast_billboard_pattern: int,
     freq_hf_ratio_mean: float,
+    c2pa_ai: int = 0,
     points_threshold: int = POINTS_THRESHOLD_DEFAULT,
     low_texture_threshold: int = LOW_TEXTURE_THRESHOLD,
     hf_ratio_threshold: float = HF_RATIO_THRESHOLD,
@@ -287,6 +434,7 @@ def fuse(
         "broadcast_scoreboard_pattern": broadcast_scoreboard_pattern,
         "broadcast_billboard_pattern": broadcast_billboard_pattern,
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
+        "c2pa_ai": c2pa_ai,
     }
     score = compute_ai_score(
         row,
@@ -301,9 +449,26 @@ def fuse(
         max_area_ratio_threshold=max_area_ratio_threshold,
     )
     lower_third_ok = not broadcast_trap
-    detected = int(score >= points_threshold and lower_third_ok)
+    points_score = score
+    clean_ai_candidate = (
+        int(row.get("of_count", 0)) <= 1
+        and int(row.get("zv_count", 0)) == 0
+        and int(row.get("broadcast_scoreboard_trap", 0)) == 0
+        and int(row.get("broadcast_billboard_trap", 0)) == 0
+        and int(row.get("broadcast_pattern_trap", 0)) == 0
+        and int(row.get("of_wide_lower_roi_count", 0)) == 0
+        and float(row.get("freq_hf_ratio_mean", 1.0)) < CLEAN_AI_HF_THRESHOLD
+    )
+    clean_ai_rescue_strict = (
+        clean_ai_candidate
+        and float(row.get("of_max_area_ratio", 1.0)) < CLEAN_AI_MAX_AREA_RATIO
+    )
+    detected = int(
+        points_score >= POINTS_THRESHOLD_DEFAULT
+        or (ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_strict)
+    )
     return detected, float(score), (
-        f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)}"
+        f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)};c2pa_ai={int(c2pa_ai)}"
     ), int(ai_specific), int(broadcast_trap)
 
 
@@ -584,6 +749,7 @@ def run_threshold_sweep(raw_rows: list[dict]) -> dict[str, list[dict]]:
                         broadcast_scoreboard_pattern=int(r.get("broadcast_scoreboard_pattern", 0)),
                         broadcast_billboard_pattern=int(r.get("broadcast_billboard_pattern", 0)),
                         freq_hf_ratio_mean=float(r.get("freq_hf_ratio_mean", 0.0)),
+                        c2pa_ai=int(r.get("c2pa_ai", 0)),
                         points_threshold=pts_thr,
                         low_texture_threshold=tex_thr,
                         hf_ratio_threshold=hf_thr,
@@ -698,8 +864,14 @@ def main() -> None:
     print(
         "[CFG] Using: "
         f"pts>={POINTS_THRESHOLD_DEFAULT}, hf_thr={HF_RATIO_THRESHOLD}  "
-        "→ expected F1=0.631, precision=0.837, FPR=0.216"
+        "-> expected F1=0.631, precision=0.837, FPR=0.216"
     )
+    rivagan_init = initialize_invisible_watermark()
+    if rivagan_init.get("rivaGan_ready", False):
+        print("[INIT] rivaGAN initialized once before scan loop.")
+    else:
+        reason = rivagan_init.get("reason", "unknown")
+        print(f"[INIT] rivaGAN unavailable: {reason}")
 
     raw_rows:  list[dict] = []
     eval_rows: list[dict] = []
@@ -718,12 +890,14 @@ def main() -> None:
             try:
                 result, elapsed = scan_video(vp)
                 sig = extract_signals(result)
+                c2pa_sig = detect_c2pa_signal(vp)
 
                 raw_row = {
                     "category":         category,
                     "filename":         vp.name,
                     "ground_truth":     gt,
                     **sig,
+                    **c2pa_sig,
                     "frames_sampled":   30,
                     "duration_s":       f"{elapsed:.2f}",
                     "detector_version": DETECTOR_VERSION,
@@ -754,13 +928,28 @@ def main() -> None:
                     broadcast_scoreboard_pattern = sig["broadcast_scoreboard_pattern"],
                     broadcast_billboard_pattern = sig["broadcast_billboard_pattern"],
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
+                    c2pa_ai = c2pa_sig["c2pa_ai"],
                 )
                 # Twarda reguła #1 i #2 z tasku naprawczego:
                 # 1) ai_specific=0 -> zawsze brak
                 # 2) lower-third wykryty + ai_specific=0 -> zawsze brak
-                if ai_specific == 0:
+                rescue_guard_override = (
+                    ai_specific == 0
+                    and det == 1
+                    and float(score) < float(POINTS_THRESHOLD_DEFAULT)
+                    and int(sig.get("of_count", 0)) >= 1
+                    and int(sig.get("of_wide_lower_roi_count", 0)) == 0
+                    and float(sig.get("iw_best_similarity", 0.0)) >= 0.60
+                    and float(sig.get("freq_hf_ratio_mean", 1.0)) < CLEAN_AI_HF_THRESHOLD
+                    and int(sig.get("broadcast_scoreboard_trap", 0)) == 0
+                    and int(sig.get("broadcast_billboard_trap", 0)) == 0
+                    and int(sig.get("broadcast_pattern_trap", 0)) == 0
+                )
+                if ai_specific == 0 and not rescue_guard_override:
                     det = 0
                     mode = mode + ";guard_no_ai_specific=1"
+                if rescue_guard_override:
+                    mode = mode + ";guard_rescue_override=1"
                 if sig.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD and ai_specific == 0:
                     det = 0
                     mode = mode + ";guard_lowerthird_without_ai=1"
@@ -796,6 +985,9 @@ def main() -> None:
                     "broadcast_scoreboard_pattern": sig["broadcast_scoreboard_pattern"],
                     "broadcast_billboard_pattern": sig["broadcast_billboard_pattern"],
                     "freq_hf_ratio_mean": sig["freq_hf_ratio_mean"],
+                    "c2pa_found":        c2pa_sig["c2pa_found"],
+                    "c2pa_ai":           c2pa_sig["c2pa_ai"],
+                    "c2pa_generator":    c2pa_sig["c2pa_generator"],
                     "duration_s":         f"{elapsed:.2f}",
                 }
                 eval_rows.append(eval_row)

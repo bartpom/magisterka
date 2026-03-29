@@ -373,6 +373,9 @@ _KNOWN_SIGNATURES: Dict[str, str] = {
 }
 
 _INVISIBLE_WM_AVAILABLE = None
+_RIVAGAN_INIT_ATTEMPTED = False
+_RIVAGAN_READY = False
+_RIVAGAN_REASON = ""
 
 
 def _check_imwatermark() -> bool:
@@ -400,6 +403,53 @@ def _torch_available() -> bool:
         return False
 
 
+def initialize_invisible_watermark(log_fn=None) -> Dict[str, Any]:
+    """
+    Jednorazowa inicjalizacja backendow invisible-watermark, w tym rivaGAN.
+    Funkcja jest idempotentna i bezpieczna do wielokrotnego wywolania.
+    """
+    global _RIVAGAN_INIT_ATTEMPTED, _RIVAGAN_READY, _RIVAGAN_REASON
+
+    def _log(msg: str) -> None:
+        print(msg, file=sys.stderr)
+        if log_fn:
+            try:
+                log_fn(msg)
+            except Exception:
+                pass
+
+    if _RIVAGAN_INIT_ATTEMPTED:
+        return {
+            "rivaGan_ready": _RIVAGAN_READY,
+            "reason": _RIVAGAN_REASON,
+        }
+
+    _RIVAGAN_INIT_ATTEMPTED = True
+
+    if not _check_imwatermark():
+        _RIVAGAN_REASON = "imwatermark niedostepny (pip install invisible-watermark)"
+        _log(f"[ADV] rivaGAN init: {_RIVAGAN_REASON}")
+        return {"rivaGan_ready": False, "reason": _RIVAGAN_REASON}
+
+    if not _torch_available():
+        _RIVAGAN_REASON = "torch niedostepny - pomijam rivaGAN"
+        _log(f"[ADV] rivaGAN init: {_RIVAGAN_REASON}")
+        return {"rivaGan_ready": False, "reason": _RIVAGAN_REASON}
+
+    try:
+        from imwatermark import WatermarkDecoder  # type: ignore
+        WatermarkDecoder.loadModel()
+        _RIVAGAN_READY = True
+        _RIVAGAN_REASON = "OK"
+        _log("[ADV] rivaGAN model zaladowany (loadModel).")
+    except Exception as e:
+        _RIVAGAN_READY = False
+        _RIVAGAN_REASON = str(e)
+        _log(f"[ADV] rivaGAN init error: {_RIVAGAN_REASON}")
+
+    return {"rivaGan_ready": _RIVAGAN_READY, "reason": _RIVAGAN_REASON}
+
+
 def detect_invisible_watermark(
     frame_bgr: np.ndarray,
     methods: Optional[List[str]] = None,
@@ -414,7 +464,8 @@ def detect_invisible_watermark(
 
     if methods is None:
         methods = ["dwtDct", "dwtDctSvd"]
-        if _torch_available():
+        state = initialize_invisible_watermark()
+        if _torch_available() and state.get("rivaGan_ready", False):
             methods.append("rivaGan")
 
     try:
@@ -427,6 +478,11 @@ def detect_invisible_watermark(
 
     for method in methods:
         try:
+            if method == "rivaGan":
+                state = initialize_invisible_watermark()
+                if not state.get("rivaGan_ready", False):
+                    result["details"] = f"pomijam rivaGan: {state.get('reason', 'not initialized')}"
+                    continue
             method_bits = 32 if method == "rivaGan" else watermark_length
             decoder = WatermarkDecoder('bits', method_bits)
             watermark_bits = decoder.decode(bgr, method)
