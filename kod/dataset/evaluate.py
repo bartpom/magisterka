@@ -64,6 +64,7 @@ from fusion_params import (
     ENABLE_CLEAN_AI_RESCUE,
     HF_RATIO_THRESHOLD_SWEEP,
     HF_RATIO_THRESHOLD,
+    HIGH_SCORE_OVERRIDE_THRESHOLD,
     LOW_TEXTURE_THRESHOLD_SWEEP,
     LOWER_THIRD_HARD_THRESHOLD,
     LOWER_THIRD_HARD_UPPER_MAX,
@@ -102,7 +103,7 @@ RAW_FIELDS = [
 
 EVAL_FIELDS = [
     "category", "filename", "ground_truth",
-    "detected", "fusion_score", "fusion_mode", "ai_specific", "broadcast_trap",
+    "detected", "fusion_score", "fusion_mode", "ai_specific", "broadcast_trap", "high_score_override",
     "zv_count", "zv_lower_third_roi_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
     "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
@@ -953,6 +954,19 @@ def main() -> None:
                 if sig.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD and ai_specific == 0:
                     det = 0
                     mode = mode + ";guard_lowerthird_without_ai=1"
+                high_score_override = 0
+                if (
+                    det == 0
+                    and float(score) >= float(HIGH_SCORE_OVERRIDE_THRESHOLD)
+                    and int(broadcast_trap) == 1
+                ):
+                    det = 1
+                    high_score_override = 1
+                    mode = mode + ";high_score_override=1"
+                    print(
+                        f"  ADV HIGH_SCORE_OVERRIDE: fusion_score={float(score):.3f}, "
+                        "broadcast_trap=1 -> det=1"
+                    )
 
                 eval_row = {
                     "category":           category,
@@ -963,6 +977,7 @@ def main() -> None:
                     "fusion_mode":        mode,
                     "ai_specific":        ai_specific,
                     "broadcast_trap":     broadcast_trap,
+                    "high_score_override": high_score_override,
                     "zv_count":           sig["zv_count"],
                     "zv_lower_third_roi_count": sig["zv_lower_third_roi_count"],
                     "of_count":           sig["of_count"],
