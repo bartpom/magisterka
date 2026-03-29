@@ -8,6 +8,11 @@
 | adv_cropped (27 videos) | 0.6667 | 18 | - | - | 9 |
 | adv_fp_trap (37 videos) | FPR 0.1081 | - | 4 | 33 | - |
 
+Pelne manifesty datasetu dostepne sa w plikach `dataset/manifest_fake_all.csv`
+(93 rekordy: 31 baseline + 31 compressed + 31 cropped, label=fake)
+oraz `dataset/manifest_real_all.csv` (36 rekordow, label=real).
+Opis struktury folderow: `dataset/README_dataset.md`.
+
 ## Per-Generator Recall (new videos only)
 | Generator | Detected | Total | Recall |
 |---|---|---|---|
