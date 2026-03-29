@@ -3,60 +3,75 @@
 *.iml
 desktop.ini
 .DS_Store
+PyCharmMiscProject.iml
 
 # Python
 __pycache__/
+kod/__pycache__/
+kod/dataset/__pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+
+# Srodowiska wirtualne
 .venv/
 venv/
+kod/.venv/
+kod/venv/
+nagrania/venv/
+nagrania/venv_win/
 
-# Local artifacts
-*.log
-<<<<<<< HEAD
+# Lokalne raporty z testow (generowane automatycznie)
+kod/ai_reports/
+ai_reports/
 
-# Nagrania i lokalne foldery
-nagrania/
+# Lokalne outputy detektora
+kod/reports/
+kod/suspicious_frames/
+kod/frames_output/
+kod/ocr_outputs/
 
-# Archiwa i duże pliki binarne
-*.rar
-*.zip
-*.mp4
-*.avi
-*.mov
-*.mkv
+# Zewnetrzne repozytoria sklonowane lokalnie
+kod/FreqNet-DeepfakeDetection/
+kod/deepfake-detection-challenge/
 
-# Modele AI (wagi sieci)
+# Puste foldery placeholderow
+data/
+watermark_templates/
+kod/watermark_templates/
+
+# Modele i wagi (za duze dla git)
 kod/model/
 kod/models/
 kod/weights/
+weights/
+models/
 
-# Deepfake detection challenge
-kod/deepfake-detection-challenge/
-kod/FreqNet-DeepfakeDetection/
-
-# Wyniki działania, raporty i klatki
+# Wyniki ewaluacji (snapshoty)
 kod/results/
-kod/reports/
-kod/ai_reports/
-ai_reports/
-kod/suspicious_frames/
+results/
+
+# Nagrania testowe (lokalne, nie w repo)
+nagrania/
+
+# Lokalne artefakty i cache
+*.log
+tmp/
+cache/
+downloads/
 debug_test/
 aplikacje www.txt
 
-# Dataset — ignoruj foldery z wideo, zachowaj kod i manifesty
+# Pliki tymczasowe
+*.bat
+*.part
+*.m4a
+reszta plikow.rar
+reszta plików.rar
+*.rar
+*.zip
+
+# Dataset code only in kod/dataset, no local media
 kod/dataset/*
 !kod/dataset/*.py
 !kod/dataset/*.csv
-
-# PyCharm IDE artifacts (nie powinny trafiać do repo)
-PyCharmMiscProject.iml
-=======
-tmp/
-cache/
-results/
-downloads/
-weights/
-models/
->>>>>>> 246da3b (Mod gitignore)
