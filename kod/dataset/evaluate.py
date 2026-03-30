@@ -75,6 +75,9 @@ from fusion_params import (
     SCOREBOARD_HF_MIN,
 )
 
+# Test F: globalny prog detekcji ustawiony na 5 (zamiast 4).
+POINTS_THRESHOLD_DEFAULT = 5
+
 DATASET_ROOT = Path(__file__).parent
 RESULTS_BASE = DATASET_ROOT.parent / "results"
 RESULTS_BASE.mkdir(parents=True, exist_ok=True)
@@ -239,6 +242,7 @@ def compute_ai_score(
     low_hf = float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold
     iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
     c2pa_ai = int(row.get("c2pa_ai", 0)) == 1
+    zv_count = int(row.get("zv_count", 0))
     wide_lower = int(row.get("of_wide_lower_roi_count", 0))
     corner_compact = int(row.get("of_corner_compact_roi_count", 0))
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
@@ -263,7 +267,7 @@ def compute_ai_score(
     if low_hf and candidate_ai_shape:
         score += 1
     # Signal 4: regiony zero-variance (statyczne overlaye/logotypy)
-    if int(row.get("zv_count", 0)) >= 1:
+    if zv_count >= 1:
         score += 1
     if iw_strong:
         score += 2
@@ -451,6 +455,14 @@ def fuse(
     )
     lower_third_ok = not broadcast_trap
     points_score = score
+    soft_threshold_hit = (
+        ai_specific == 1
+        and int(broadcast_trap) == 0
+        and int(row.get("of_count", 0)) >= 10
+        and points_score >= 3
+        and points_score < points_threshold
+        and int(c2pa_ai) == 0
+    )
     clean_ai_candidate = (
         int(row.get("of_count", 0)) <= 1
         and int(row.get("zv_count", 0)) == 0
@@ -465,12 +477,17 @@ def fuse(
         and float(row.get("of_max_area_ratio", 1.0)) < CLEAN_AI_MAX_AREA_RATIO
     )
     detected = int(
-        points_score >= POINTS_THRESHOLD_DEFAULT
+        soft_threshold_hit
+        or points_score >= POINTS_THRESHOLD_DEFAULT
         or (ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_strict)
     )
-    return detected, float(score), (
-        f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)};c2pa_ai={int(c2pa_ai)}"
-    ), int(ai_specific), int(broadcast_trap)
+    mode = (
+        f"ai_score={score};ai_specific={int(ai_specific)};"
+        f"lower_third_ok={int(lower_third_ok)};c2pa_ai={int(c2pa_ai)}"
+    )
+    if soft_threshold_hit:
+        mode += ";soft_threshold=1"
+    return detected, float(score), mode, int(ai_specific), int(broadcast_trap)
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -883,11 +900,12 @@ def main() -> None:
         if not videos:
             print(f"[WARN] Brak .mp4 w {folder}", file=sys.stderr)
             continue
-        print(f"\n=== {category} ({len(videos)} filmow) ===")
-        total_videos += len(videos)
+        total = len(videos)
+        print(f"\n=== {category} ({total} filmow) ===")
+        total_videos += total
 
-        for vp in videos:
-            print(f"  [SCAN] {vp.name} ... ", end="", flush=True)
+        for idx, vp in enumerate(videos, 1):
+            print(f"  [SCAN] ({idx}/{total}) {vp.name} ... ", end="", flush=True)
             try:
                 result, elapsed = scan_video(vp)
                 sig = extract_signals(result)
@@ -931,31 +949,61 @@ def main() -> None:
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                     c2pa_ai = c2pa_sig["c2pa_ai"],
                 )
-                # Twarda reguła #1 i #2 z tasku naprawczego:
-                # 1) ai_specific=0 -> zawsze brak
-                # 2) lower-third wykryty + ai_specific=0 -> zawsze brak
-                rescue_guard_override = (
-                    ai_specific == 0
-                    and det == 1
-                    and float(score) < float(POINTS_THRESHOLD_DEFAULT)
-                    and int(sig.get("of_count", 0)) >= 1
-                    and int(sig.get("of_wide_lower_roi_count", 0)) == 0
-                    and float(sig.get("iw_best_similarity", 0.0)) >= 0.60
-                    and float(sig.get("freq_hf_ratio_mean", 1.0)) < CLEAN_AI_HF_THRESHOLD
-                    and int(sig.get("broadcast_scoreboard_trap", 0)) == 0
-                    and int(sig.get("broadcast_billboard_trap", 0)) == 0
-                    and int(sig.get("broadcast_pattern_trap", 0)) == 0
+                c2pa_override = int(c2pa_sig.get("c2pa_ai", 0)) == 1
+                if c2pa_override:
+                    det = 1
+                    mode = mode + ";c2pa_override=1"
+
+                kling_static_ai = (
+                    int(sig.get("zv_count", 0)) == 4
+                    and float(sig.get("iw_best_similarity", 0.0)) >= 0.40
+                    and int(broadcast_trap) == 0
                 )
-                if ai_specific == 0 and not rescue_guard_override:
-                    det = 0
-                    mode = mode + ";guard_no_ai_specific=1"
-                if rescue_guard_override:
-                    mode = mode + ";guard_rescue_override=1"
-                if sig.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD and ai_specific == 0:
-                    det = 0
-                    mode = mode + ";guard_lowerthird_without_ai=1"
+                if kling_static_ai:
+                    det = 1
+                    mode = mode + ";kling_static_ai=1"
+
+                sora_static_override = (
+                    int(sig.get("of_count", 0)) == 0
+                    and int(sig.get("zv_count", 0)) == 0
+                    and float(sig.get("freq_hf_ratio_mean", 1.0)) < 0.38
+                )
+                if sora_static_override:
+                    det = 1
+                    mode = mode + ";sora_static_override=1"
+
+                guard_bypass = c2pa_override or kling_static_ai or sora_static_override
+                rescue_guard_override = False
+                if not guard_bypass:
+                    # Twarda reguła #1 i #2 z tasku naprawczego:
+                    # 1) ai_specific=0 -> zawsze brak
+                    # 2) lower-third wykryty + ai_specific=0 -> zawsze brak
+                    rescue_guard_override = (
+                        ai_specific == 0
+                        and det == 1
+                        and float(score) < float(POINTS_THRESHOLD_DEFAULT)
+                        and int(sig.get("of_count", 0)) >= 1
+                        and int(sig.get("of_wide_lower_roi_count", 0)) == 0
+                        and float(sig.get("iw_best_similarity", 0.0)) >= 0.60
+                        and float(sig.get("freq_hf_ratio_mean", 1.0)) < CLEAN_AI_HF_THRESHOLD
+                        and int(sig.get("broadcast_scoreboard_trap", 0)) == 0
+                        and int(sig.get("broadcast_billboard_trap", 0)) == 0
+                        and int(sig.get("broadcast_pattern_trap", 0)) == 0
+                    )
+                    if ai_specific == 0 and not rescue_guard_override:
+                        det = 0
+                        mode = mode + ";guard_no_ai_specific=1"
+                    if rescue_guard_override:
+                        mode = mode + ";guard_rescue_override=1"
+                    if (
+                        sig.get("of_lower_third_roi_ratio", 0.0) > LOWER_THIRD_HARD_THRESHOLD
+                        and ai_specific == 0
+                    ):
+                        det = 0
+                        mode = mode + ";guard_lowerthird_without_ai=1"
+
                 high_score_override = 0
-                if (
+                if (not c2pa_override) and (
                     det == 0
                     and float(score) >= float(HIGH_SCORE_OVERRIDE_THRESHOLD)
                     and int(broadcast_trap) == 1
