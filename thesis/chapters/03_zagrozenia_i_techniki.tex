@@ -1,13 +1,13 @@
 \chapter{Zagro\.{z}enia i~techniki manipulacji multimediami}
 \label{ch:zagrozenia}
 
-Rozdzia\l{} opisuje taksononomi\k{e} zagro\.{z}e\'{n} zwi\k{a}zanych
+Rozdzia\l{} opisuje taksonomj\k{e} zagro\.{z}e\'{n} zwi\k{a}zanych
 z~fa\l{}szowaniem tre\'{s}ci multimedialnych, techniki generowania
 i~manipulacji oraz metody weryfikacji autentyczno\'{s}ci oparte
 na~znakowaniu wodnym. Sekcja~\ref{sec:watermarking_detail}
 om\'{o}wiona jest szczeg\'{o}\l{}owo, poniewa\.{z} znakowanie wodne stanowi
 kluczowy kontekst dla oceny ogranicze\'{n} narz\k{e}dzi detekcji
-omowionych w~rozdziale~\ref{ch:narzedzia}.
+om\'{o}wionych w~rozdziale~\ref{ch:narzedzia}.
 
 % ===================================================================
 \section{Taksonomia technik manipulacji}
@@ -48,12 +48,12 @@ na~pi\k{e}\'{c} g\l{}\'{o}wnych kategorii:
         generatywnych.
 \end{enumerate}
 
-Skal\k{e} zagro\.{z}enia ilustruje fakt, \.{z}e raport
-Europolu z~2023~r. szacuje, i\.{z} do~roku 2026
-ponad 90\% tre\'{s}ci w~Internecie mo\.{z}e by\'{c} wygenerowane
-lub zmodyfikowane przez AI~\cite{Europol2023Deepfakes}.
+Skal\k{e} zagro\.{z}enia ilustruje fakt, \.{z}e raport Europolu z~2023~r.
+szacuje, i\.{z} do~roku 2026 ponad 90\% tre\'{s}ci w~Internecie
+mo\.{z}e by\'{c} wygenerowane lub zmodyfikowane przez
+AI~\cite{Europol2023Deepfakes}.
 Wp\l{}yw dezinformacji multimedialnej dokumentuj\k{a} liczne
-badania~--- w~szczeg\'{o}lno\'{s}ci w~kontekstach wyborczym,
+badania --- w~szczeg\'{o}lno\'{s}ci w~kontekstach wyborczym,
 bankowym i~wojennym~\cite{Khan2025ComprehensiveSurvey}.
 
 % ===================================================================
@@ -61,22 +61,22 @@ bankowym i~wojennym~\cite{Khan2025ComprehensiveSurvey}.
 \label{sec:techniki_detekcji}
 
 Techniki detekcji omawiane szczeg\'{o}\l{}owo w~literaturze
-(rozdzia\l{}~\ref{ch:tlo}) mo\.{z}na podzieli\'{c} na~trzy podej\'{s}cia:
+(rozdzia\l{}~\ref{ch:tlo}) mo\.{z}na podzieli\'{c} na~trzy podej\'{s}cia.
 
-\begin{description}
-  \item[Post-hoc (passive)] Analiza pliku po~jego opublikowaniu,
-        bez wcze\'{s}niejszego oznakowania.
-        Obejmuje metody spektralne (FFT), przep\l{}yw optyczny,
-        analiz\k{e} klatek przez CNN/ViT i~analiz\k{e} metadanych.
-        Opisano w~sekcji~\ref{sec:detekcja_przeglad}.
-  \item[Proaktywne (active)] Osadzenie znaku wodnego
-        w~momencie generowania lub edycji.
-        Weryfikacja polega na~odczycie znaku.
-        Opisano szczeg\'{o}\l{}owo w~sekcji~\ref{sec:watermarking_detail}.
-  \item[Proweniencja (C2PA)] Kryptograficznie podpisany
-        \l{}a\'{n}cuch metadanych o~historii pliku.
-        Opisano w~sekcji~\ref{sec:c2pa}.
-\end{description}
+\textbf{Post-hoc (passive).}
+Analiza pliku po~jego opublikowaniu, bez wcze\'{s}niejszego oznakowania.
+Obejmuje metody spektralne (FFT), przep\l{}yw optyczny,
+analiz\k{e} klatek przez CNN/ViT i~analiz\k{e} metadanych.
+Opisano w~sekcji~\ref{sec:detekcja_przeglad}.
+
+\textbf{Proaktywne (active).}
+Osadzenie znaku wodnego w~momencie generowania lub edycji.
+Weryfikacja polega na~odczycie znaku.
+Opisano szczeg\'{o}\l{}owo w~sekcji~\ref{sec:watermarking_detail}.
+
+\textbf{Proweniencja (C2PA).}
+Kryptograficznie podpisany \l{}a\'{n}cuch metadanych o~historii pliku.
+Opisano w~sekcji~\ref{sec:c2pa}.
 
 % ===================================================================
 \section{Znakowanie wodne tre\'{s}ci generowanych przez AI}
@@ -86,10 +86,10 @@ Znakowanie wodne (\textit{digital watermarking}) polega na~osadzeniu
 w~pliku multimedialnym informacji identyfikacyjnej w~taki spos\'{o}b,
 aby by\l{}a ona trudna do~usuni\k{e}cia lub niezauwa\.{z}alna
 dla obserwatora~\cite{Luo2025WatermarkingAIGC}.
-W~kontekcie tre\'{s}ci generowanych przez AI technologia ta
+W~kontek\'{s}cie tre\'{s}ci generowanych przez AI technologia ta
 pozwala na~jednoznaczne oznaczenie materia\l{}u ju\.{z} w~momencie
-jego tworzenia, co tworzy alternatywn\k{a} \'{s}cie\.{z}k\k{e}
-weryfikacji~--- niezale\.{z}n\k{a} od~analizy artefakt\'{o}w wizualnych.
+jego tworzenia, co~tworzy alternatywn\k{a} \'{s}cie\.{z}k\k{e}
+weryfikacji --- niezale\.{z}n\k{a} od~analizy artefakt\'{o}w wizualnych.
 
 % -------------------------------------------------------------------
 \subsection{Znakowanie wodne widoczne}
@@ -99,28 +99,28 @@ Widoczny znak wodny (\textit{visible watermark}) jest celowo
 prezentowany w~polu widzenia odbiorcy --- typowo jako logotyp,
 napis lub wzorzec geometryczny na\l{}o\.{z}ony na~tre\'{s}\'{c}.
 
-\paragraph{Zastosowania.}
+\textbf{Zastosowania.}
 Znaki wodne widoczne stosowane s\k{a} przez platformy
-dystrybucji tre\'{s}ci (Getty Images, Shutterstock,
-Adobe Stock) jako ochrona praw autorskich.
-W~kontekcie AI kilka generator\'{o}w obrazu/wideo
-domyslnie dodaje widoczne logo do bezp\l{}atnych wersji
+dystrybucji tre\'{s}ci (Getty Images, Shutterstock, Adobe~Stock)
+jako ochrona praw autorskich.
+W~kontek\'{s}cie AI kilka generator\'{o}w obrazu/wideo
+domy\'{s}lnie dodaje widoczne logo do~bezp\l{}atnych wersji
 (Runway, Pika Labs, Kling AI).
 
-\paragraph{Metody usuwania.}
+\textbf{Metody usuwania.}
 Widoczne znaki wodne s\k{a} podatne na~usuwanie przez:
 \begin{itemize}
   \item przycinanie lub kadrowanie obszaru ze~znakiem;
   \item inpainting oparty na~modelach generatywnych
-        (np. Stable Diffusion z~mask\k{a});
-  \item sieciowe detektory-usuwacze, trenowane na~parach
-        ,,z~znakiem / bez znaku''.
+        (np.\ Stable Diffusion z~mask\k{a});
+  \item sieciowe detektory-usuwacze trenowane na~parach
+        ,,z~znakiem~/ bez znaku''.
 \end{itemize}
 
-\paragraph{Detekcja widocznych znak\'{o}w.}
+\textbf{Detekcja widocznych znak\'{o}w.}
 Weryfikacja polega na~prostej analizie obrazu:
-detekcja szablonowa (template matching), segmentacja
-semantyczna lub klasyczna analiza histogramowa
+detekcja szablonowa (\textit{template matching}),
+segmentacja semantyczna lub klasyczna analiza histogramowa
 w~obszarze typowego umieszczenia logotypu.
 Nie jest to technika odporna na~usuwanie.
 
@@ -128,41 +128,39 @@ Nie jest to technika odporna na~usuwanie.
 \subsection{Znakowanie wodne niewidoczne}
 \label{sec:watermark_invisible}
 
-Niewidoczny znak wodny (\textit{invisible/steganographic watermark})
+Niewidoczny znak wodny (\textit{invisible\,/\,steganographic watermark})
 zostaje osadzony w~danych pliku w~spos\'{o}b niezauwa\.{z}alny
-gol\k{y}m okiem, ale mo\.{z}liwy do~odczytu przez specjalistyczny
+go\l{}ym okiem, ale mo\.{z}liwy do~odczytu przez specjalistyczny
 dekoder.
 
 \subsubsection{Metody osadzania}
 \label{sec:watermark_embed}
 
-\paragraph{LSB (Least Significant Bit).}
+\textbf{LSB (Least Significant Bit).}
 Najprostsza metoda: zapis informacji w~najmniej znacz\k{a}cych
-bitach pikseli. Niew idoczna, ale skrajnie wra\.{z}liwa
+bitach pikseli. Niewidoczna, ale skrajnie wra\.{z}liwa
 na~kompresj\k{e} i~konwersj\k{e} formatu.
 
-\paragraph{DCT/DWT -- dziedzina cz\k{e}stotliwo\'{s}ci.}
-Informacja osadzana jest w~wsp\'{o}\l{}czynnikach
-transformaty DCT (JPEG) lub falkowej DWT,
-zwykle w~pasmach \'{s}rednich cz\k{e}stotliwo\'{s}ci.
-M\'{o}wi si\k{e}, \.{z}e metoda ta jest bardziej odporna na~kompresj\k{e}
-ni\.{z} LSB, poniewa\.{z} koduje informacj\k{e} w~strukturze
-postrzeganej przez algorytm kompresji jako ,,znaczna''.
+\textbf{DCT/DWT -- dziedzina cz\k{e}stotliwo\'{s}ci.}
+Informacja osadzana jest we~wsp\'{o}\l{}czynnikach transformaty DCT (JPEG)
+lub falkowej DWT, zwykle w~pasmach \'{s}rednich cz\k{e}stotliwo\'{s}ci.
+Metoda ta jest bardziej odporna na~kompresj\k{e} ni\.{z} LSB,
+poniewa\.{z} koduje informacj\k{e} w~strukturze postrzeganej
+przez algorytm kompresji jako ,,znacz\k{a}ca''.
 
-\paragraph{Sieci neuronowe -- HiDDeN i~nast\k{e}pcy.}
+\textbf{Sieci neuronowe -- HiDDeN i~nast\k{e}pcy.}
 Architektura \textbf{HiDDeN}~\cite{Zhu2018HiDDeN}
-(\textit{Hiding Data with Deep Networks}) trenuje
-jednocze\'{s}nie enkoder (osadza wiadomo\'{s}\'{c}) i~dekoder
-(odczytuje wiadomo\'{s}\'{c}), minimalizuj\k{a}c
-both straty postrzeganej jako wygladu i~straty
-binarnego odczytu wiadomo\'{s}ci.
-Konkurencyjne podej\'{s}cie~-- \textbf{StegaStamp}~-- osadza
- do 100 bit\'{o}w informacji odpornych na~wydruk i~skanowanie.
+(\textit{Hiding Data with Deep Networks}) trenuje jednocze\'{s}nie
+enkoder (osadza wiadomo\'{s}\'{c}) i~dekoder (odczytuje wiadomo\'{s}\'{c}),
+minimalizuj\k{a}c jednocze\'{s}nie strat\k{e} postrzeganej jako\'{s}ci
+i~strat\k{e} binarnego odczytu wiadomo\'{s}ci.
+Konkurencyjne podej\'{s}cie --- \textbf{StegaStamp} --- osadza
+do~100~bit\'{o}w informacji odpornych na~wydruk i~skanowanie.
 Fernandez et al.\ \cite{Fernandez2024BlindWatermark}
-rozszerzyli to podej\'{s}cie o~odporno\'{s}\'{c} na~ataki
-geometryczne (obr\'{o}t, przyspieszenie).
+rozszerzyli to~podej\'{s}cie o~odporno\'{s}\'{c} na~ataki
+geometryczne (obr\'{o}t, przycinanie).
 
-\paragraph{Watermarking spektralny dla wideo.}
+\textbf{Watermarking spektralny dla wideo.}
 Dla wideo dodatkowym kana\l{}em jest osadzanie znaku
 w~dziedzinie temporalnej: modyfikacja fazy przep\l{}ywu
 optycznego mi\k{e}dzy klatkami lub wstrzykni\k{e}cie
@@ -180,36 +178,35 @@ realizowana nast\k{e}puj\k{a}cymi podej\'{s}ciami:
         dekoder otrzymuje jedynie plik do~weryfikacji
         i~klucz prywatny; nie ma dost\k{e}pu do~orygina\l{}u.
         Osi\k{a}galne przez sieci neuronowe trenowane end-to-end.
-        Jest to standard w~praktycznych systemach.
+        Jest to~standard w~praktycznych systemach.
 
   \item \textbf{Detekcja referencyjna (non-blind)} ---
         dekoder por\'{o}wnuje plik ze~zdekodowanym orygina\l{}em;
         dok\l{}adniejsza, ale wymaga przechowania orygina\l{}u.
 
   \item \textbf{Analiza statystyczna szumu} ---
-        bez dekodera: analiza residuum po~odj\k{e}ciu
-        przetworzonego obrazu od~predykcji generowanej
-        przez model kompresji. Szum residuum zawiera
-        sygna\l{} znaku wodnego wykrywalny progowym
-        testem hipotez (test $\chi^2$ lub Neymana-Pearsona).
+        bez dekodera: analiza residuum po~odj\k{e}ciu przetworzonego
+        obrazu od~predykcji generowanej przez model kompresji.
+        Szum residuum zawiera sygna\l{} znaku wodnego wykrywalny
+        progowym testem hipotez (test~$\chi^2$ lub Neymana-Pearsona).
 
-  \item \textbf{PRNU-based verification} ---
-        Por\'{o}wnanie wzorca szumu sensora kamery
-        (Photo-Response Non-Uniformity) z~wzorcem
+  \item \textbf{Weryfikacja oparta na~PRNU} ---
+        por\'{o}wnanie wzorca szumu sensora kamery
+        (\textit{Photo-Response Non-Uniformity}) z~wzorcem
         wydobytym z~podejrzanego nagrania.
-        Metoda stosowana do~weryfikacji \.{z}r\'{o}d\l{}a
-        nagrania, nie jako znak wodny wprost,
-        ale analogiczny mechanizm~\cite{Wang2024ReliabilityPerspective}.
+        Metoda stosowana do~weryfikacji \'{z}r\'{o}d\l{}a nagrania,
+        nie jako znak wodny wprost, ale analogiczny
+        mechanizm~\cite{Wang2024ReliabilityPerspective}.
 \end{enumerate}
 
 \subsubsection{Odporno\'{s}\'{c} a~ataki}
 \label{sec:watermark_attacks}
 
 Zhao et al.\ \cite{Zhao2023InvisibleRemovable} wykazali,
-\.{z}e niewidoczne znaki wodne mog\k{a} by\'{c} \textbf{usuni\k{e}te
-przy~u\.{z}yciu modeli generatywnych} bez znacz\k{a}cej
+\.{z}e niewidoczne znaki wodne mog\k{a} by\'{c} usuni\k{e}te
+przy~u\.{z}yciu modeli generatywnych bez znacz\k{a}cej
 degradacji jako\'{s}ci wizualnej.
-PrzegL\k{a}d SoK~\cite{Piet2024SoKWatermarking}
+Przegl\k{a}d SoK~\cite{Piet2024SoKWatermarking}
 identyfikuje pi\k{e}\'{c} klas atak\'{o}w:
 
 \begin{enumerate}
@@ -219,17 +216,19 @@ identyfikuje pi\k{e}\'{c} klas atak\'{o}w:
   \item \textbf{Ataki geometryczne} --- przycinanie,
         zmiana rozdzielczo\'{s}ci, obroty naruszaj\k{a}
         przestrzenne po\l{}o\.{z}enie znaku.
-  \item \textbf{Szumienie i~filtrowanie} --- Gaussian blur,
-        median filter, dodanie szumu gaussowskiego.
+  \item \textbf{Szumienie i~filtrowanie} ---
+        Gaussian blur, median filter, dodanie szumu gaussowskiego.
   \item \textbf{Ataki adwersaryjne} --- optymalizacja
         perturbacji pikseli niszcz\k{a}cej znak
         przy minimalnej zmianie postrzeganego wygl\k{a}du.
-  \item \textbf{Regeneracja przez model AI} --- przepuszczenie
-        obrazu przez model dyfuzyjny (\textit{diffusion purification})
-        usuwa znak zachowuj\k{a}c semantyk\k{e} obrazu.
+  \item \textbf{Regeneracja przez model AI} ---
+        przepuszczenie obrazu przez model dyfuzyjny
+        (\textit{diffusion purification}) usuwa znak,
+        zachowuj\k{a}c semantyk\k{e} obrazu.
 \end{enumerate}
 
-\.{Z}aden z~aktualnie dost\k{e}pnych system\'{o}w nie jest
+\noindent
+\'{Z}aden z~aktualnie dost\k{e}pnych system\'{o}w nie jest
 odporny jednocze\'{s}nie na~wszystkie klasy atak\'{o}w.
 
 % -------------------------------------------------------------------
@@ -237,33 +236,32 @@ odporny jednocze\'{s}nie na~wszystkie klasy atak\'{o}w.
 \label{sec:watermark_metrics}
 
 Ewaluacja systemu znakowania wodnego wymaga oceny
-dw\'{o}ch przeciwstawnych w\l{}a\'{s}ciwo\'{s}ci:
+dwóch przeciwstawnych w\l{}a\'{s}ciwo\'{s}ci.
 
-\begin{description}
-  \item[Niepostrzegalno\'{s}\'{c} (imperceptibility)]
-        Mierzona metrykam postrzegania jako\'{s}ci obrazu:
-        \textbf{PSNR} (\textit{Peak Signal-to-Noise Ratio}),
-        \textbf{SSIM} (\textit{Structural Similarity Index})
-        oraz \textbf{LPIPS} (\textit{Learned Perceptual Image Patch
-        Similarity}). Wy\.{z}szy PSNR i~SSIM oznacza
-        mniejsz\k{a} ingerencj\k{e} w~obraz.
-  \item[Odporno\'{s}\'{c} (robustness)]
-        Mierzona \textbf{BER} (\textit{Bit Error Rate}) ---
-        odsetkiem b\l{}\k{e}dnie odczytanych bit\'{o}w wiadomo\'{s}ci
-        po~ataku. Cel: BER $< 5\%$ po~typowych
-        transformacjach (kompresja, zmiana rozdzielczo\'{s}ci).
-\end{description}
+\textbf{Niepostrzegalno\'{s}\'{c} (imperceptibility).}
+Mierzona metrykami postrzegania jako\'{s}ci obrazu:
+\textbf{PSNR} (\textit{Peak Signal-to-Noise Ratio}),
+\textbf{SSIM} (\textit{Structural Similarity Index})
+oraz \textbf{LPIPS} (\textit{Learned Perceptual Image Patch Similarity}).
+Wy\.{z}szy PSNR i~SSIM oznacza mniejsz\k{a} ingerencj\k{e} w~obraz.
+
+\textbf{Odporno\'{s}\'{c} (robustness).}
+Mierzona \textbf{BER} (\textit{Bit Error Rate}) ---
+odsetkiem b\l{}\k{e}dnie odczytanych bit\'{o}w wiadomo\'{s}ci po~ataku.
+Cel: BER~$< 5\%$ po~typowych transformacjach
+(kompresja, zmiana rozdzielczo\'{s}ci).
 
 Dodatkowo stosuje si\k{e} metryki skuteczno\'{s}ci detekcji
 w~uj\k{e}ciu binarnym:
 \begin{itemize}
-  \item \textbf{True Positive Rate (TPR)} --- odsetek
-        poprawnie wykrytych znak\'{o}w.
-  \item \textbf{False Positive Rate (FPR)} ---
+  \item \textbf{TPR} (\textit{True Positive Rate}) ---
+        odsetek poprawnie wykrytych znak\'{o}w.
+  \item \textbf{FPR} (\textit{False Positive Rate}) ---
         odsetek plik\'{o}w nieoznaczonych, kt\'{o}re system
         b\l{}\k{e}dnie sklasyfikowa\l{} jako oznakowane.
-  \item \textbf{AUC-ROC} --- pole pod krzywd\k{a}
-        klasyfikatora dla r\'{o}\.{z}nych prog\'{o}w detekcji.
+  \item \textbf{AUC-ROC} ---
+        pole pod krzyw\k{a} klasyfikatora dla r\'{o}\.{z}nych
+        prog\'{o}w detekcji.
 \end{itemize}
 
 % ===================================================================
@@ -274,16 +272,16 @@ w~uj\k{e}ciu binarnym:
 \label{sec:c2pa_opis}
 
 \textbf{C2PA} (\textit{Coalition for Content Provenance and Authenticity})
-to otwarta specyfikacja techniczna opracowana wsp\'{o}lnie
-prze Adobe, Microsoft, Intel, BBC, Sony i~Truepic~\cite{C2PA2024Spec}.
-Definiuje format \textbf{Content Credentials} --- cyfrowo
-podpisanego zestawu metadanych opisuj\k{a}cych histori\k{e}
-powstania i~edycji pliku multimedialnego.
+to~otwarta specyfikacja techniczna opracowana wsp\'{o}lnie przez
+Adobe, Microsoft, Intel, BBC, Sony i~Truepic~\cite{C2PA2024Spec}.
+Definiuje format \textbf{Content Credentials} --- cyfrowo podpisanego
+zestawu metadanych opisuj\k{a}cych histori\k{e} powstania
+i~edycji pliku multimedialnego.
 
-C2PA nie jest systemem detekcji w~rozumieniu analizy
-artefakt\'{o}w --- jest natomiast mechanizmem \textbf{proweniencji
-kryptograficznej}: weryfikacja polega na~sprawdzeniu
-podpisu cyfrowego (X.509), nie na~ocenie tre\'{s}ci.
+C2PA nie jest systemem detekcji w~rozumieniu analizy artefakt\'{o}w ---
+jest natomiast mechanizmem \textbf{proweniencji kryptograficznej}:
+weryfikacja polega na~sprawdzeniu podpisu cyfrowego (X.509),
+nie na~ocenie tre\'{s}ci.
 
 \subsection{Architektura i~dzia\l{}anie}
 \label{sec:c2pa_architektura}
@@ -294,19 +292,19 @@ lub powi\k{a}zan\k{a} z~nim przez hash. Manifest sk\l{}ada si\k{e} z:
 
 \begin{itemize}
   \item \textbf{Claim} --- wykaz wykonanych operacji
-        (generowanie, edycja, kadrowanie) wraz z~timestamp.
-  \item \textbf{Assertions} --- szczeg\'{o}\l{}owe
-        twierdzenia o~tre\'{s}ci: u\.{z}yte narz\k{e}dzie
+        (generowanie, edycja, kadrowanie) wraz z~\textit{timestamp}.
+  \item \textbf{Assertions} --- szczeg\'{o}\l{}owe twierdzenia
+        o~tre\'{s}ci: u\.{z}yte narz\k{e}dzie
         (np.\ \texttt{c2pa.ai.generative}), model, parametry.
-  \item \textbf{Claim Signature} --- podpis ECDSA
-        (lub RSA) na~zawarto\'{s}ci Claim, wystawiony
-        przez certyfikat X.509 tworca lub narz\k{e}dzia.
-  \item \textbf{Ingredients} --- opcjonalne odwo\l{}ania
-        do~plik\'{o}w wej\'{s}ciowych (np.\ oryginalne zdj\k{e}cie
-        przed edycj\k{a}) z~ich hashami SHA-256.
+  \item \textbf{Claim Signature} --- podpis ECDSA (lub RSA)
+        na~zawarto\'{s}ci Claim, wystawiony przez certyfikat
+        X.509 tw\'{o}rcy lub narz\k{e}dzia.
+  \item \textbf{Ingredients} --- opcjonalne odwo\l{}ania do~plik\'{o}w
+        wej\'{s}ciowych (np.\ oryginalne zdj\k{e}cie przed edycj\k{a})
+        z~ich hashami SHA-256.
 \end{itemize}
 
-Procedura weryfikacji po stronie odbiorcy:
+Procedura weryfikacji po~stronie odbiorcy:
 \begin{enumerate}
   \item Odczyt Manifestu z~pliku lub rejestru online.
   \item Sprawdzenie integralno\'{s}ci: hash pliku musi
@@ -315,42 +313,42 @@ Procedura weryfikacji po stronie odbiorcy:
         certyfikatu X.509 wystawcy.
   \item Sprawdzenie \l{}a\'{n}cucha zaufania certyfikatu
         (Certificate Transparency, OCSP).
-  \item Ocena tre\'{s}ci Assertions --- czy plik
-        zawiera oznaczenie \texttt{c2pa.ai.generative}.
+  \item Ocena tre\'{s}ci Assertions --- czy plik zawiera
+        oznaczenie \texttt{c2pa.ai.generative}.
 \end{enumerate}
 
 \subsection{C2PA a~detekcja AI -- rola w~niniejszej pracy}
 \label{sec:c2pa_detekcja}
 
-Analiza metadanych C2PA stanowi jeden z~kana\l{}\'{o}w
-sygna\l{}\'{o}w w~proponowanym detektorze.
+Analiza metadanych C2PA stanowi jeden z~kana\l{}\'{o}w sygna\l{}\'{o}w
+w~proponowanym detektorze.
 Je\'{s}li plik zawiera wa\.{z}ny Manifest C2PA z~asercj\k{a}
-\texttt{c2pa.ai.generative}, system automatycznie
-klasyfikuje go jako wygenerowany przez AI z~wysok\k{a}
-pewno\'{s}ci\k{a}, bez konieczno\'{s}ci dalszej analizy wizualnej.
+\texttt{c2pa.ai.generative}, system automatycznie klasyfikuje
+go~jako wygenerowany przez AI z~wysok\k{a} pewno\'{s}ci\k{a},
+bez konieczno\'{s}ci dalszej analizy wizualnej.
 
 C2PA ma jednak kluczowe ograniczenia:
 \begin{itemize}
   \item \textbf{Wdro\.{z}enie nie jest powszechne} ---
         tylko cz\k{e}\'{s}\'{c} modeli generatywnych osadza
-        Content Credentials (Adobe Firefly, Stable Diffusion 3
+        Content Credentials (Adobe Firefly, Stable Diffusion~3
         z~odpowiedni\k{a} konfiguracj\k{a}); Runway, Sora
         i~Kling AI nie stosuj\k{a} C2PA standardowo.
   \item \textbf{Metadane mo\.{z}na usun\k{a}\'{c}} ---
-        prosta reenkodacja pliku (FFmpeg bez flag
-        zachowania metadanych) usuwa Manifest.
-        System musi traktowa\'{c} brak Manifestu jako
-        wynik nierozstrzygni\k{e}ty, nie jako dow\'{o}d
-        autentyczno\'{s}ci.
+        prosta reenkodacja pliku (FFmpeg bez flag zachowania
+        metadanych) usuwa Manifest. System musi traktowa\'{c}
+        brak Manifestu jako wynik nierozstrzygni\k{e}ty,
+        nie jako dow\'{o}d autentyczno\'{s}ci.
   \item \textbf{Fa\l{}szywy Manifest} ---
-        atakuj\k{a}cy mo\.{z}e teorytycznie wystawia\'{c}
-        Manifestu z~samopodpisanym certyfikatem;
+        atakuj\k{a}cy mo\.{z}e teoretycznie wystawi\'{c} Manifest
+        z~samopodpisanym certyfikatem;
         weryfikacja \l{}a\'{n}cucha zaufania jest kluczowa.
 \end{itemize}
 
 Pomimo tych ogranicze\'{n} C2PA jest obiecuj\k{a}cym
-standardem d\l{}ugoterminowym. Inicjatywy takie jak
-\textbf{Google DeepMind SynthID} (znakowanie wodne
-generowane w~modelu) i~\textbf{Meta Watermarking} zmierzaj\k{a}
-w~kierunku, w~kt\'{o}rym ka\.{z}da tre\'{s}\'{c} AI b\k{e}dzie
-nosl\k{a} kryptograficzne oznaczenie niezale\.{z}nie od~platform.
+standardem d\l{}ugoterminowym.
+Initiatywy takie jak \textbf{Google DeepMind SynthID}
+(znakowanie wodne generowane w~modelu)
+i~\textbf{Meta Watermarking} zmierzaj\k{a} w~kierunku,
+w~kt\'{o}rym ka\.{z}da tre\'{s}\'{c} AI b\k{e}dzie nosi\l{}a
+kryptograficzne oznaczenie niezale\.{z}nie od~platformy.
