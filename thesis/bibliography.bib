@@ -1,10 +1,10 @@
 % Bibliografia pracy magisterskiej
-% Tytuł: Analiza narzędzi dla przeciwdziałania dezinformacji w obszarze multimediów
-% Autor: Bartłomiej Pomietło, 2026
-% Data dostępu do zasobów online: 2026-04-01
+% Tytu\l{}: Analiza narz\k{e}dzi dla przeciwdzia\l{}ania dezinformacji w obszarze multimedi\'{o}w
+% Autor: Bart\l{}omiej Pomiet\l{}o, 2026
+% Data dost\k{e}pu do zasobow online: 2026-04-01
 
 % -------------------------------------------------------
-% 1. Przeglądy ogólne – zjawisko deepfake i AIGC
+% 1. Przegl\k{a}dy og\'{o}lne -- zjawisko deepfake i AIGC
 % -------------------------------------------------------
 
 @article{Khan2025ComprehensiveSurvey,
@@ -56,7 +56,7 @@
 }
 
 % -------------------------------------------------------
-% 2. Detekcja deepfake wideo – optical flow i analiza ruchu
+% 2. Detekcja deepfake wideo -- optical flow i analiza ruchu
 % -------------------------------------------------------
 
 @article{Caldelli2021OpticalFlowCNN,
@@ -100,7 +100,7 @@
 }
 
 % -------------------------------------------------------
-% 3. Watermarking – treści generowane przez AI
+% 3. Watermarking -- tre\'{s}ci generowane przez AI
 % -------------------------------------------------------
 
 @article{Luo2025WatermarkingAIGC,
@@ -165,4 +165,192 @@
   url           = {https://arxiv.org/abs/2411.18479},
   urldate       = {2026-04-01},
   note          = {Preprint},
+}
+
+% -------------------------------------------------------
+% 4. Modele generatywne -- fundamentalne prace
+% -------------------------------------------------------
+
+@inproceedings{Goodfellow2014GAN,
+  author    = {Goodfellow, Ian and Pouget-Abadie, Jean and Mirza, Mehdi
+               and Xu, Bing and Warde-Farley, David and Ozair, Sherjil
+               and Courville, Aaron and Bengio, Yoshua},
+  title     = {Generative Adversarial Nets},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2014},
+  pages     = {2672--2680},
+  url       = {https://arxiv.org/abs/1406.2661},
+  urldate   = {2026-04-01},
+}
+
+@inproceedings{Vondrick2016VideoGAN,
+  author    = {Vondrick, Carl and Pirsiavash, Hamed and Torralba, Antonio},
+  title     = {Generating Videos with Scene Dynamics},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2016},
+  pages     = {613--621},
+  url       = {https://arxiv.org/abs/1609.02612},
+  urldate   = {2026-04-01},
+}
+
+@misc{Ho2020DDPM,
+  author        = {Ho, Jonathan and Jain, Ajay and Abbeel, Pieter},
+  title         = {Denoising Diffusion Probabilistic Models},
+  year          = {2020},
+  eprint        = {2006.11239},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2006.11239},
+  urldate       = {2026-04-01},
+  note          = {Preprint},
+}
+
+@misc{Videoworldsimulators2024,
+  author        = {{OpenAI}},
+  title         = {Video Generation Models as World Simulators},
+  year          = {2024},
+  url           = {https://openai.com/research/video-generation-models-as-world-simulators},
+  urldate       = {2026-04-01},
+  note          = {Technical Report},
+}
+
+@misc{Runway2024Gen3,
+  author        = {{Runway}},
+  title         = {Introducing {Gen-3 Alpha}: {A} New Frontier for Video Generation},
+  year          = {2024},
+  url           = {https://runwayml.com/research/introducing-gen-3-alpha},
+  urldate       = {2026-04-01},
+  note          = {Blog post},
+}
+
+% -------------------------------------------------------
+% 5. Detekcja -- artefakty czestotliwosciowe
+% -------------------------------------------------------
+
+@inproceedings{Frank2020FrequencyDNN,
+  author    = {Frank, Joel and Eisenhofer, Thorsten and Sch\"onherr, Lea
+               and Fischer, Asja and Kolossa, Dorothea and Holz, Thorsten},
+  title     = {Leveraging Frequency Analysis for Deep Fake Image Recognition},
+  booktitle = {Proceedings of the International Conference on Machine
+               Learning (ICML)},
+  year      = {2020},
+  pages     = {3247--3258},
+  url       = {https://arxiv.org/abs/2003.08685},
+  urldate   = {2026-04-01},
+}
+
+% -------------------------------------------------------
+% 6. Transformer-based i CLIP-based detekcja
+% -------------------------------------------------------
+
+@misc{Dong2023CLIPDeepfake,
+  author        = {Dong, Shicheng and others},
+  title         = {Implicit Identity Leakage: The Stumbling Block to Improving
+                   Deepfake Detection Generalization},
+  year          = {2023},
+  eprint        = {2310.10042},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2310.10042},
+  urldate       = {2026-04-01},
+  note          = {Preprint},
+}
+
+% -------------------------------------------------------
+% 7. Benchmarki i zbiory danych
+% -------------------------------------------------------
+
+@inproceedings{Rossler2019FaceForensics,
+  author    = {R\"ossler, Andreas and Cozzolino, Davide and Verdoliva, Luisa
+               and Riess, Christian and Thies, Justus and Nie\ss{}ner, Matthias},
+  title     = {{FaceForensics++}: Learning to Detect Manipulated Facial Images},
+  booktitle = {Proceedings of the IEEE/CVF International Conference on
+               Computer Vision (ICCV)},
+  year      = {2019},
+  pages     = {1--11},
+  doi       = {10.1109/ICCV.2019.00009},
+  url       = {https://arxiv.org/abs/1901.08971},
+  urldate   = {2026-04-01},
+}
+
+@misc{Dolhansky2020DFDC,
+  author        = {Dolhansky, Brian and others},
+  title         = {The {DeepFake Detection Challenge (DFDC)} Dataset},
+  year          = {2020},
+  eprint        = {2006.07397},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2006.07397},
+  urldate       = {2026-04-01},
+  note          = {Preprint},
+}
+
+@misc{Shao2023DGM4,
+  author        = {Shao, Rui and Wu, Tianxing and Liu, Ziwei},
+  title         = {Detecting and Grounding Multi-Modal Media Manipulation},
+  year          = {2023},
+  eprint        = {2304.02556},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2304.02556},
+  urldate       = {2026-04-01},
+  note          = {Preprint},
+}
+
+@misc{Sun2024GenVideo,
+  author        = {Sun, Zhiyuan and others},
+  title         = {{GenVideo}: {A} Large-Scale Dataset and Benchmark for
+                   Detecting {AI}-Generated Video},
+  year          = {2024},
+  eprint        = {2404.05219},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.CV},
+  url           = {https://arxiv.org/abs/2404.05219},
+  urldate       = {2026-04-01},
+  note          = {Preprint},
+}
+
+% -------------------------------------------------------
+% 8. Artefakty wizualne w deepfake
+% -------------------------------------------------------
+
+@inproceedings{Matern2019ExploitingVisualArtifacts,
+  author    = {Matern, Falko and Riess, Christian and Stamminger, Marc},
+  title     = {Exploiting Visual Artifacts to Expose Deepfakes and Face
+               Manipulations},
+  booktitle = {IEEE Winter Applications of Computer Vision Workshops (WACVW)},
+  year      = {2019},
+  doi       = {10.1109/WACVW.2019.00022},
+  url       = {https://arxiv.org/abs/1812.06670},
+  urldate   = {2026-04-01},
+}
+
+% -------------------------------------------------------
+% 9. Znakowanie wodne -- HiDDeN
+% -------------------------------------------------------
+
+@inproceedings{Zhu2018HiDDeN,
+  author    = {Zhu, Joren and Kaplan, Russell and Johnson, Justin
+               and Fei-Fei, Li},
+  title     = {{HiDDeN}: Hiding Data With Deep Networks},
+  booktitle = {Proceedings of the European Conference on Computer
+               Vision (ECCV)},
+  year      = {2018},
+  pages     = {657--672},
+  doi       = {10.1007/978-3-030-01267-0\_39},
+  url       = {https://arxiv.org/abs/1807.09937},
+  urldate   = {2026-04-01},
+}
+
+% -------------------------------------------------------
+% 10. Standardy proweniencji -- C2PA
+% -------------------------------------------------------
+
+@misc{C2PA2024Spec,
+  author        = {{Coalition for Content Provenance and Authenticity (C2PA)}},
+  title         = {{C2PA} Technical Specification v2.1},
+  year          = {2024},
+  url           = {https://c2pa.org/specifications/specifications/2.1/specs/C2PA_Specification.html},
+  urldate       = {2026-04-01},
+  note          = {Technical Specification},
 }
