@@ -298,12 +298,14 @@ class ClampedHeader(QHeaderView):
     QHeaderView z twardym ograniczeniem sumy szerokości kolumn do viewportu.
 
     Mechanizm squeeze-resize:
-    - Gdy kolumna col rośnie o delta, natychmiast kurczymy następną kolumnę
-      (col+1) o tę samą deltę — suma pozostaje stała i równa viewportowi.
-    - Jeśli następna kolumna osiągnęła minimum, squeeze jest blokowany
-      i kolumna col nie może już rosnąć (twarde ograniczenie).
-    - Po zwolnieniu myszy _rebalance() wyrównuje ostatnią kolumnę tak,
-      żeby suma === viewport (naprawia drobne rozbieżności po resize okna).
+    - Gdy kolumna col rośnie o delta, natychmiast kurczymy kolumnę col+1
+      o tę samą wartość — suma pozostaje równa szerokości viewportu.
+    - Jeśli sąsiad osiągnął minimum, wzrost bieżącej kolumny jest blokowany.
+    - Gdy kolumna col maleje, kolumna col+1 dostaje zwolnione miejsce.
+    - Ostatnia kolumna nigdy nie może być poszerzona (nie ma sąsiada do
+      skurczenia), więc drag na jej prawej krawędzi jest efektywnie zablokowany.
+    - _rebalance() wywoływany po mouseRelease i resizeEvent wyrównuje ostatnią
+      kolumnę tak, żeby suma === viewport (naprawia drobne rozbieżności).
     - _guard zapobiega rekurencji przy programowym wywołaniu resizeSection.
     """
 
@@ -311,7 +313,6 @@ class ClampedHeader(QHeaderView):
         super().__init__(orientation, parent)
         self._min_w = min_widths
         self._guard = False
-        self._prev_sizes: list[int] = []
         self.setSectionsMovable(False)
         self.setSectionsClickable(True)
         self.setHighlightSections(True)
@@ -330,8 +331,14 @@ class ClampedHeader(QHeaderView):
     def _min(self, col: int) -> int:
         return self._min_w[col] if col < len(self._min_w) else 40
 
-    def _sizes(self) -> list[int]:
-        return [self.sectionSize(i) for i in range(self.count())]
+    def _next_visible(self, after: int) -> int:
+        """Zwraca indeks pierwszej nieukrytej kolumny po 'after', lub -1."""
+        i = after + 1
+        while i < self.count():
+            if not self.isSectionHidden(i):
+                return i
+            i += 1
+        return -1
 
     # ------------------------------------------------------------------
     # squeeze: gdy col rośnie, kurczy col+1 (i dalej jeśli trzeba)
@@ -345,20 +352,15 @@ class ClampedHeader(QHeaderView):
         if delta == 0:
             return
 
-        # Szukamy kolumny do squeeze — następna nieukryta po col
-        squeeze_col = col + 1
-        while squeeze_col < self.count() and self.isSectionHidden(squeeze_col):
-            squeeze_col += 1
+        squeeze_col = self._next_visible(col)
 
-        if squeeze_col >= self.count():
-            # Nie ma sąsiada — cofnij zmianę, żeby nie przekroczyć viewportu
-            vw = self._viewport_w()
-            current_sum = sum(self._sizes())
-            if current_sum > vw:
-                clamped = max(self._min(col), new_size - (current_sum - vw))
+        if squeeze_col == -1:
+            # Ostatnia kolumna — nie ma sąsiada do skurczenia.
+            # Każdy wzrost jest bezpośrednio blokowany.
+            if delta > 0:
                 self._guard = True
                 try:
-                    self.resizeSection(col, clamped)
+                    self.resizeSection(col, old_size)
                 finally:
                     self._guard = False
             return
