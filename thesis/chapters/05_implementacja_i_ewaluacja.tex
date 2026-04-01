@@ -1,4 +1,64 @@
 \chapter{Implementacja i ewaluacja systemu detekcji}
 
-% TODO: wypełnić w kolejnej iteracji
-\textit{Rozdział w przygotowaniu.}
+Celem implementacji było zbudowanie praktycznego narzędzia do wsadowej analizy \textbf{plików wideo} pod kątem obecności jawnych i ukrytych znaków wodnych, metadanych pochodzenia oraz artefaktów typowych dla materiałów wygenerowanych lub przetworzonych przez systemy generatywnej~AI. System powstał w~języku \textbf{Python}, który oferuje dojrzały ekosystem bibliotek do przetwarzania obrazu, analizy sygnału i~budowy interfejsów desktopowych, a~zarazem umożliwia szybkie prototypowanie i~iteracyjne rozszerzanie metod detekcji.
+
+Architektura rozwiązania ma charakter modułowy. Aplikacja składa się z~trzech warstw: interfejsu użytkownika (GUI), warstwy orkiestracji analizy oraz zestawu wyspecjalizowanych detektorów odpowiedzialnych za wykrywanie watermarków widocznych, próbę odczytu watermarków niewidzialnych, analizę metadanych C2PA, ocenę artefaktów częstotliwościowych i~identyfikację statycznych nakładek powtarzających się w~kolejnych klatkach. Taki podział upraszcza dalszy rozwój projektu, ponieważ nowe heurystyki i~klasyfikatory mogą być dodawane jako osobne moduły bez przebudowy całej aplikacji.
+
+\section{Język programowania i biblioteki}
+
+Rdzeń systemu zaimplementowano w~języku \textbf{Python~3}. Graficzny interfejs użytkownika zbudowano z~wykorzystaniem biblioteki \textbf{PyQt6} --- zestawu wiązań języka Python do biblioteki Qt6, który pozwala tworzyć natywnie wyglądające aplikacje okienkowe na systemach Windows, macOS i~Linux. Dzięki temu możliwe było przygotowanie w~pełni funkcjonalnej aplikacji desktopowej z~tabelą wyników, mechanizmem kolejkowania plików, paskiem postępu, podglądem klatki oraz obsługą raportów generowanych dla każdego analizowanego materiału.
+
+W warstwie przetwarzania wideo kluczową rolę pełnią biblioteki~\textbf{OpenCV} i~\textbf{NumPy}. OpenCV odpowiada za odczyt klatek z~pliku wideo, operacje na~obrazie (np. filtrowanie CLAHE, wyrównanie histogramu, detekcja krawędzi), obliczanie przepływu optycznego metodą Farnebäcka oraz wstępne przygotowanie danych dla kolejnych etapów. NumPy służy do wydajnych obliczeń macierzowych i~operacji na~pikselach. Biblioteka \textbf{Pandas} umożliwia agregację wyników z~wielu klatek i~zapis raportów do~plików~CSV.
+
+Do rozpoznawania tekstu w~klatkach wideo (watermarki widoczne, napisy, \textit{lower thirds}) aplikacja korzysta z~silników~OCR. W~zależności od konfiguracji środowiska uruchamiany jest silnik \textbf{EasyOCR} lub \textbf{PaddleOCR} --- oba działają lokalnie i~nie wymagają połączenia z~usługami zewnętrznymi. W~warstwie analizy statystycznej sygnału wideo oraz~przy obliczaniu widma częstotliwościowego klatek (analiza FFT) wykorzystywana jest biblioteka \textbf{SciPy}.
+
+Detekcja watermarków niewidzialnych i~sprawdzenie metadanych C2PA (\textit{Content Credentials}) realizowane są przez dedykowane moduły~\texttt{c2pa\_detector} i~dodatkowe komponenty opierające się na~publicznych specyfikacjach standardu C2PA opracowanego przez~\textit{Coalition for Content Provenance and Authenticity}. W~części badawczej uwzględniono również wpływ systemów~\textbf{SynthID} (Google DeepMind) na materiały generowane przez popularne generatory, co pozwoliło zestawić własny detektor z~rozwiązaniami opartymi na~znakach osadzanych bezpośrednio w~procesie generacji.
+
+\section{Architektura aplikacji i GUI}
+
+Interfejs użytkownika napisany w~PyQt6 pełni rolę warstwy sterującej całym procesem analitycznym. Główne okno aplikacji podzielone jest na~dwa panele rozdzielone ruchomym separatorem (\textit{splitter}): lewy panel zawiera tabelę wyników, konsolę logów i~pasek postępu, natomiast prawy panel prezentuje podgląd aktualnie analizowanej klatki oraz powiększony widok obszaru, w~którym wykryto watermark (\textit{Zoom}).
+
+Tabela wyników zawiera sześć kolumn: nazwę pliku, typ materiału, status detekcji AI, procentowy udział klatek z~wykryciem, status metadanych C2PA oraz ścieżkę do raportu~CSV. Dwukrotne kliknięcie wiersza otwiera w~eksploratorze plików katalog wynikowy przypisany do~danego materiału wideo.
+
+Obsługiwane formaty wideo to: \texttt{mp4}, \texttt{mov}, \texttt{avi}, \texttt{mkv} i~\texttt{webm}. Aplikacja jest ukierunkowana wyłącznie na~analizę \textbf{materiałów filmowych}, nie obrazów statycznych, co odpowiada celowi pracy --- detekcji watermarków i~śladów generatywnego pochodzenia w~plikach wideo, gdzie istotna jest zarówno zawartość pojedynczej klatki, jak i~informacja temporalna między klatkami.
+
+Pliki mogą być dodawane do~kolejki przez okno dialogowe, przez przeciągnięcie i~upuszczenie (\textit{drag and drop}) lub rekurencyjne skanowanie całego folderu. Użytkownik konfiguruje czułość OCR (parametr \textit{confidence}), gęstość próbkowania klatek (\textit{sample rate}) oraz opcjonalny tryb szczegółowej analizy dwufazowej, który po~pierwszym przebiegu ponownie analizuje klatki bez detekcji z~zastosowaniem zaawansowanych filtrów obrazu (CLAHE, Top-Hat, korekta gamma, odwrócone kolory).
+
+\section{Moduły detekcji}
+
+Warstwa detekcji składa się z~kilku współpracujących modułów uruchamianych kolejno dla każdego pliku wideo. Moduł \texttt{ocr\_detector} odpowiada za~ekstrakcję klatek, normalizację obrazu i~wykrywanie tekstu metodami OCR. Wykryte regiony tekstowe są filtrowane według progu pewności i~porównywane ze~słownikiem znanych fraz watermarkingowych (\enquote{Generated by AI}, \enquote{Runway}, \enquote{Sora} i~inne). Wyniki są zapisywane w~raporcie wraz ze~współrzędnymi wykrytych obszarów, co umożliwia późniejsze przejrzenie klatek z~zaznaczonymi detekcjami.
+
+Analiza statycznych nakładek polega na~obliczeniu mediany temporalnej sekwencji klatek --- element powtarzający się przez wiele kolejnych klatek w~tym~samym miejscu (np. logo stacji) daje silny sygnał w~medianie, który odróżnia go~od~treści dynamicznych. Analiza przepływu optycznego pozwala z~kolei wykryć obszary o~zerowym lub prawie zerowym ruchu, które mogą wskazywać na~obecność nakładki statycznej.
+
+Dla każdego pliku wytwarzany jest zestaw artefaktów diagnostycznych: klatki z~zaznaczonymi obszarami detekcji, obraz mediany temporalnej, wizualizacje z~analizy FFT oraz plik~\texttt{report.csv} zawierający metadane analizy, numery klatek, współrzędne wykryć i~poziomy pewności. Taki sposób dokumentowania wyników sprawia, że system nie działa jak \enquote{czarna skrzynka} --- użytkownik może przejrzeć każdy artefakt i~zweryfikować zasadność decyzji klasyfikacyjnej.
+
+\section{Opis ilustracji i zrzutów ekranu}
+
+% TODO: wstawić zrzuty ekranu z folderu photos i uzupełnić opisy poniżej
+
+Każda ilustracja w~tym rozdziale powinna opisywać \textbf{konkretny etap działania aplikacji}, a~nie wyłącznie widok interfejsu. Oznacza to, że podpis rysunku powinien wskazywać: który moduł jest aktywny, co wyświetla tabela lub panel podglądu, jakie artefakty są widoczne i~jaki jest sens prezentowanego wyniku.
+
+Przykładowe schematy podpisów do zastosowania przy dodawaniu zrzutów ekranu:
+
+\begin{itemize}
+  \item \textit{Główne okno aplikacji (PyQt6) podczas wsadowej analizy filmów; lewy panel zawiera tabelę z~wynikami detekcji watermarków (kolumny: plik, typ, status, \% AI, C2PA, CSV), prawy panel prezentuje aktualnie analizowaną klatkę wideo oraz powiększony obszar wykrycia.}
+  \item \textit{Katalog raportu wygenerowanego przez aplikację dla jednego pliku wideo; widoczne są zapisane klatki z~zaznaczonymi wykryciami OCR, obraz mediany temporalnej, wizualizacja FFT i~plik \texttt{report.csv} z~metadanymi detekcji.}
+  \item \textit{Konsola logów aplikacji prezentująca kolejne etapy analizy: inicjalizację silnika OCR (EasyOCR/PaddleOCR), próbkowanie klatek z~zadanym \textit{sample rate}, wykrycie regionu tekstowego z~podanym poziomem pewności oraz zapis raportu do~katalogu wynikowego.}
+  \item \textit{Wynik analizy pliku \texttt{000000passport\_fake.mp4}; w~tabeli status \texttt{🔴 AI DETECTED} z~typem detekcji, w~kolumnie C2PA brak metadanych Content Credentials; panel Zoom prezentuje powiększony obszar wykrycia.}
+\end{itemize}
+
+\section{Źródła i inspiracje techniczne}
+
+Rozwój systemu był wspierany przez dokumentacje techniczne bibliotek \textbf{OpenCV}, \textbf{PyQt6}, \textbf{EasyOCR} i~\textbf{PaddleOCR}, a~w~warstwie koncepcyjnej przez publiczne materiały dotyczące standardu \textbf{C2PA} (\url{https://c2pa.org}), dokumentację systemu \textbf{SynthID} (Google DeepMind) oraz publikacje i~zasoby omówione w~rozdziałach~2--3 niniejszej pracy.
+
+Doskonalenie detekcji miało charakter iteracyjny. Wyniki własnego detektora były porównywane z~zachowaniem publicznie dostępnych generatorów wideo (Runway, Sora, Luma Dream Machine) i~komercyjnych detektorów, analizowane były materiały demonstracyjne publikowane przez dostawców modeli, a~skuteczność poszczególnych heurystyk weryfikowano po~typowych operacjach na~plikach: kompresji, skalowaniu, rekodowaniu i~konwersji formatu. Dzięki temu projekt ewoluował w~kierunku wielosygnałowego detektora, który łączy analizę OCR, przepływu optycznego, artefaktów FFT i~metadanych pochodzenia.
+
+\section{Ewaluacja jakościowa}
+
+Ewaluacja systemu w~niniejszej pracy ma charakter jakościowy i~eksploracyjny. Oceniano, czy aplikacja potrafi wykrywać charakterystyczne sygnały obecne w~materiałach z~popularnych generatorów wideo, czy wyniki są stabilne po~kompresji oraz czy system unika fałszywych alarmów dla materiałów zawierających legalne nakładki graficzne (billboardy, dolne napisy telewizyjne, transmisje strumieniowe).
+
+Istotną cechą zaproponowanego systemu jest dostarczanie wyników pośrednich, co pozwala sprawdzić, czy detekcja wynikała z~wykrycia tekstu przez OCR, z~utrzymywania się statycznej nakładki w~kolejnych klatkach, z~anomalii w~analizie FFT czy z~wykrycia metadanych C2PA. Zwiększa to wiarygodność systemu i~stanowi przewagę nad narzędziami zwracającymi wyłącznie pojedynczy procentowy wskaźnik bez uzasadnienia --- jak pokazano w~rozdziale~4 na~przykładzie \textit{detectvideo.ai}, który dla~80\% badanych filmów zwrócił wynik~55\% (\textit{inconclusive}), nie podejmując żadnej decyzji klasyfikacyjnej.
+
+\section{Wnioski implementacyjne}
+
+Przeprowadzona implementacja potwierdziła, że skuteczny detektor materiałów AI nie powinien opierać się na~jednym sygnale. Znacznie lepsze rezultaty daje połączenie kilku niezależnych źródeł informacji: OCR, analizy ruchu, artefaktów częstotliwościowych, watermarkingu niewidzialnego i~metadanych proweniencji. Doświadczenia z~budowy aplikacji pokazują jednocześnie, że równie ważna jak warstwa algorytmiczna jest jakość interfejsu, czytelność raportowania i~dostępność artefaktów diagnostycznych --- szczególnie przy analizie trudnych przypadków, w~których automatyczna decyzja wymaga ludzkiej weryfikacji.

@@ -43,9 +43,12 @@ COL_PCT    = 3
 COL_C2PA   = 4
 COL_CSV    = 5
 
+# Minimalne szerokosci kolumn — kolumna CSV nigdy nie moze zniknac
+_COL_MIN_WIDTHS = [80, 45, 90, 100, 50, 80]
+
 _SETTINGS_ORG  = "WatermarkDetector"
 _SETTINGS_APP  = "GUI"
-_KEY_MAIN_SPLIT  = "splitter/main4"   # nowy klucz = reset starych zapisow
+_KEY_MAIN_SPLIT  = "splitter/main4"
 _KEY_LEFT_SPLIT  = "splitter/left4"
 _KEY_TABLE_COLS  = "table/cols"
 
@@ -247,10 +250,6 @@ class ToggleSwitch(QtWidgets.QAbstractButton):
 # ======================== SplitterHandle z ikona ========================
 
 class GripSplitterHandle(QtWidgets.QSplitterHandle):
-    """
-    Niestandardowy uchwyt splittera poziomego z narysowana ikona uchwytу (3 kropki).
-    Kursor zmienia sie na SizeHorCursor przy najechaniu.
-    """
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
         self.setCursor(Qt.CursorShape.SizeHorCursor)
@@ -272,7 +271,6 @@ class GripSplitterHandle(QtWidgets.QSplitterHandle):
 
 
 class GripSplitter(QSplitter):
-    """QSplitter z GripSplitterHandle tylko dla poziomej orientacji."""
     def createHandle(self):
         if self.orientation() == Qt.Orientation.Horizontal:
             return GripSplitterHandle(self.orientation(), self)
@@ -389,11 +387,6 @@ def _fill_zoom_label(crop_bgr: np.ndarray, label_w: int, label_h: int) -> QPixma
     return QPixmap.fromImage(qt_img)
 
 
-def _zero_min(widget: QWidget) -> QWidget:
-    widget.setMinimumSize(0, 0)
-    return widget
-
-
 # ======================== AspectRatioWidget (16:9 container) ========================
 
 class AspectRatioWidget(QWidget):
@@ -432,15 +425,16 @@ class AspectRatioWidget(QWidget):
 class WatermarkWorker(QtCore.QThread):
     progress       = pyqtSignal(int, int)
     eta_update     = pyqtSignal(str)
-    file_started   = pyqtSignal(int, str, int)
-    file_finished  = pyqtSignal(int, dict)
+    file_started   = pyqtSignal(int, str, int)   # global_idx, name, total_frames
+    file_finished  = pyqtSignal(int, dict)        # global_idx, details
     log_line       = pyqtSignal(str)
     frame_detected = pyqtSignal(np.ndarray, list)
     all_done       = pyqtSignal()
 
-    def __init__(self, files, confidence, sample_rate, output_dir, detailed_scan, parent=None):
+    def __init__(self, files, row_offset, confidence, sample_rate, output_dir, detailed_scan, parent=None):
         super().__init__(parent)
         self._files         = list(files)
+        self._row_offset    = row_offset   # indeks pierwszego nowego wiersza w tabeli
         self._confidence    = confidence
         self._sample_rate   = max(1, int(sample_rate)) if sample_rate else 1
         self._output_dir    = output_dir
@@ -473,16 +467,17 @@ class WatermarkWorker(QtCore.QThread):
         frame_times: list[float] = []
 
         try:
-            for idx, path in enumerate(self._files):
+            for local_idx, path in enumerate(self._files):
                 if self._stop:
                     break
 
+                global_idx = self._row_offset + local_idx
                 fname = os.path.basename(path)
-                total_frames = all_frame_counts[idx]
+                total_frames = all_frame_counts[local_idx]
 
-                self.file_started.emit(idx, fname, total_frames)
+                self.file_started.emit(global_idx, fname, total_frames)
                 self.log_line.emit(
-                    f"[{idx+1}/{len(self._files)}] Rozpoczynam analizę: {fname} "
+                    f"[{local_idx+1}/{len(self._files)}] Rozpoczynam analizę: {fname} "
                     f"(Conf: {self._confidence}, Sample: {self._sample_rate}, "
                     f"Detailed: {self._detailed_scan})"
                 )
@@ -493,7 +488,7 @@ class WatermarkWorker(QtCore.QThread):
 
                 remaining_frames_after = sum(
                     max(1, all_frame_counts[j] // self._sample_rate)
-                    for j in range(idx + 1, len(self._files))
+                    for j in range(local_idx + 1, len(self._files))
                     if all_frame_counts[j] > 0
                 )
 
@@ -553,7 +548,7 @@ class WatermarkWorker(QtCore.QThread):
                         "c2pa": c2pa_result,
                     }
 
-                self.file_finished.emit(idx, details)
+                self.file_finished.emit(global_idx, details)
         finally:
             setattr(config, "REPORTS_BASE_DIR", original_base)
 
@@ -574,8 +569,9 @@ class MainWindow(QMainWindow):
         self._splitters_initialized = False
 
         self.worker: Optional[WatermarkWorker] = None
-        self.files: list[str] = []
-        self.files_set: set[str] = set()
+        self.files: list[str] = []           # wszystkie pliki (stare + nowe)
+        self.files_set: set[str] = set()     # deduplikacja
+        self._analyzed_set: set[str] = set() # juz przeanalizowane
         self.report_paths: dict[int, str] = {}
         self.current_run_dir: Optional[str] = None
         self._file_frame_data: dict[int, dict] = {}
@@ -586,18 +582,14 @@ class MainWindow(QMainWindow):
         root_layout.setContentsMargins(10, 10, 10, 10)
         root_layout.setSpacing(0)
 
-        # ============================================================
-        # GLOWNY POZIOMY SPLITTER: lewy panel <-> prawy panel
-        # GripSplitter = niestandardowy uchwyt z 3 kropkami i kursorem
-        # ============================================================
         self.main_splitter = GripSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setChildrenCollapsible(False)
-        self.main_splitter.setHandleWidth(16)  # szerokosc uchwytu w px
+        self.main_splitter.setHandleWidth(16)
         root_layout.addWidget(self.main_splitter)
 
         # ---- LEFT PANEL ----
         left_panel = QWidget()
-        left_panel.setMinimumWidth(300)  # lewy panel nie moze byc wezszy niz 300px
+        left_panel.setMinimumWidth(300)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 4, 0)
         left_layout.setSpacing(6)
@@ -688,7 +680,6 @@ class MainWindow(QMainWindow):
         self.btn_stop.clicked.connect(self.stop_analysis)
         top.addWidget(self.btn_stop)
 
-        # Pionowy splitter: tabela <-> logi
         self.left_splitter = QSplitter(Qt.Orientation.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
         left_layout.addWidget(self.left_splitter, 1)
@@ -701,14 +692,21 @@ class MainWindow(QMainWindow):
         ])
         hh = self.table_results.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        hh.setStretchLastSection(True)
+        # Ostatnia kolumna NIE rozciaga sie automatycznie — ma swoj minWidth
+        hh.setStretchLastSection(False)
         _default_col_widths = [200, 55, 130, 160, 60, 200]
         for col, w in enumerate(_default_col_widths):
             self.table_results.setColumnWidth(col, w)
+            self.table_results.horizontalHeader().setMinimumSectionSize(_COL_MIN_WIDTHS[col])
+        # Wymuszamy minimalne szerokosci per kolumna przez delegate
+        hh.sectionResized.connect(self._enforce_col_min_widths)
         self.table_results.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_results.setAlternatingRowColors(True)
-        self.table_results.setToolTip("Dwuklik na wierszu — otworzy folder z raportem dla tego pliku.")
+        self.table_results.setToolTip(
+            "Dwuklik na wierszu — otworzy folder z raportem dla tego pliku.\n"
+            "Dwuklik na wierszu z wynikiem — wyświetla szczegóły detekcji."
+        )
         self.table_results.cellDoubleClicked.connect(self._on_row_double_clicked)
         self.left_splitter.addWidget(self.table_results)
 
@@ -749,7 +747,7 @@ class MainWindow(QMainWindow):
 
         # ---- RIGHT PANEL (podglady) ----
         right_panel = QWidget()
-        right_panel.setMinimumWidth(200)  # podglad nie moze zniknac calkowicie
+        right_panel.setMinimumWidth(200)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(4, 0, 0, 0)
         right_layout.setSpacing(4)
@@ -783,7 +781,6 @@ class MainWindow(QMainWindow):
 
         self.main_splitter.addWidget(right_panel)
 
-        # Domyslna proporcja 50/50 (zapisywana i wczytywana z QSettings)
         self.main_splitter.setStretchFactor(0, 1)
         self.main_splitter.setStretchFactor(1, 1)
 
@@ -796,6 +793,21 @@ class MainWindow(QMainWindow):
 
         if ocr_detector is not None:
             QtCore.QTimer.singleShot(500, self._warmup_ocr)
+
+    # ----------------------------------------------------------------
+    # Wymuszanie minimalnych szerokosci kolumn przy resize
+    # ----------------------------------------------------------------
+
+    @pyqtSlot(int, int, int)
+    def _enforce_col_min_widths(self, col: int, old_size: int, new_size: int) -> None:
+        """Pilnuje, żeby żadna kolumna nie była węższa niż _COL_MIN_WIDTHS[col]."""
+        min_w = _COL_MIN_WIDTHS[col] if col < len(_COL_MIN_WIDTHS) else 40
+        if new_size < min_w:
+            # Blokujemy sygnał żeby nie wywolac petli
+            hh = self.table_results.horizontalHeader()
+            hh.blockSignals(True)
+            self.table_results.setColumnWidth(col, min_w)
+            hh.blockSignals(False)
 
     # ----------------------------------------------------------------
     # showEvent: dopiero tu okno ma prawdziwa geometrie
@@ -822,7 +834,6 @@ class MainWindow(QMainWindow):
                     raise ValueError("bad sizes")
             except Exception:
                 self._settings.remove(_KEY_MAIN_SPLIT)
-                # domyslnie 50/50
                 half = total_w // 2
                 self.main_splitter.setSizes([half, total_w - half])
         else:
@@ -848,8 +859,9 @@ class MainWindow(QMainWindow):
             try:
                 widths = [int(x) for x in col_data]
                 for col, w in enumerate(widths):
-                    if col < self.table_results.columnCount() and w > 0:
-                        self.table_results.setColumnWidth(col, w)
+                    if col < self.table_results.columnCount():
+                        safe_w = max(w, _COL_MIN_WIDTHS[col] if col < len(_COL_MIN_WIDTHS) else 40)
+                        self.table_results.setColumnWidth(col, safe_w)
             except Exception:
                 self._settings.remove(_KEY_TABLE_COLS)
 
@@ -857,7 +869,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue(_KEY_MAIN_SPLIT, self.main_splitter.saveState())
         self._settings.setValue(_KEY_LEFT_SPLIT, self.left_splitter.saveState())
         widths = [self.table_results.columnWidth(c)
-                  for c in range(self.table_results.columnCount() - 1)]
+                  for c in range(self.table_results.columnCount())]
         self._settings.setValue(_KEY_TABLE_COLS, widths)
         self._settings.sync()
 
@@ -1050,9 +1062,18 @@ class MainWindow(QMainWindow):
         self._add_files(sorted(to_add))
 
     def start_analysis(self) -> None:
-        if not self.files:
-            QMessageBox.warning(self, "Brak plików", "Najpierw dodaj pliki lub folder do analizy.")
+        # BUG FIX: analizuj TYLKO pliki ktore jeszcze nie zostaly przeanalizowane
+        pending = [f for f in self.files if f not in self._analyzed_set]
+        if not pending:
+            QMessageBox.information(
+                self, "Brak nowych plików",
+                "Wszystkie pliki zostały już przeanalizowane.\n"
+                "Dodaj nowe pliki lub folder, żeby uruchomić kolejną analizę."
+            )
             return
+
+        # Indeks pierwszego oczekujacego wiersza w tabeli
+        row_offset = len(self.files) - len(pending)
 
         self._file_frame_data = {}
         for btn in (self.btn_start, self.btn_pick_files, self.btn_pick_folder):
@@ -1064,7 +1085,8 @@ class MainWindow(QMainWindow):
         self.lbl_zoom.setText("Analiza w toku...")
 
         self.worker = WatermarkWorker(
-            self.files,
+            pending,
+            row_offset,
             self.spin_conf.value(),
             self.spin_sample.value(),
             self.txt_output_dir.text().strip(),
@@ -1079,6 +1101,9 @@ class MainWindow(QMainWindow):
         self.worker.frame_detected.connect(self.set_preview_image)
         self.worker.all_done.connect(self.on_all_done)
         self.worker.start()
+
+        # Oznacz jako w trakcie analizy (dodamy do _analyzed_set po zakonczeniu)
+        self._current_pending = pending
 
     def stop_analysis(self) -> None:
         if self.worker and self.worker.isRunning():
@@ -1179,12 +1204,20 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def on_all_done(self) -> None:
+        # Oznacz przetworzone pliki jako przeanalizowane
+        if hasattr(self, "_current_pending"):
+            self._analyzed_set.update(self._current_pending)
+            self._current_pending = []
+
         self.append_log("> Analiza wszystkich plików zakończona.")
         self.progressBar.setValue(0)
         self.lbl_eta.setText("")
         for btn in (self.btn_pick_files, self.btn_pick_folder):
             btn.setEnabled(True)
-        self.btn_start.setEnabled(len(self.files) > 0)
+
+        # START aktywny tylko jesli sa nowe (nieprzetworzone) pliki
+        pending_left = [f for f in self.files if f not in self._analyzed_set]
+        self.btn_start.setEnabled(len(pending_left) > 0)
         self.btn_stop.setEnabled(False)
         self.worker = None
 
