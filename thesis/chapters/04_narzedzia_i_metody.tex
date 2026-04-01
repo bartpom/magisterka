@@ -1,4 +1,275 @@
-\chapter{Narzędzia i metody detekcji}
+\chapter{Narz\k{e}dzia i~metody detekcji}
+\label{ch:narzedzia}
 
-% TODO: wypełnić w kolejnej iteracji
-\textit{Rozdział w przygotowaniu.}
+\section{Zbi\'{o}r danych testowych}
+\label{sec:zbior_danych}
+
+Do ewaluacji narz\k{e}dzi detekcji tre\'{s}ci generowanych przez sztuczn\k{a}
+inteligencj\k{e} przygotowano zbi\'{o}r 22~film\'{o}w wideo, obejmuj\k{a}cy
+materia\l{}y syntetyczne, edytowane oraz autentyczne nagrania stanowi\k{a}ce
+klasy negatywn\k{a} (punkt odniesienia). Tabela~\ref{tab:dataset} prezentuje
+pe\l{}ne zestawienie plik\'{o}w.
+
+\begin{table}[H]
+\centering
+\caption{Zbi\'{o}r testowy film\'{o}w wideo}
+\label{tab:dataset}
+\small
+\begin{tabular}{|l|r|l|l|}
+\hline
+\textbf{Nazwa pliku} & \textbf{Rozmiar} & \textbf{Typ} & \textbf{Model/\'{z}r\'{o}d\l{}o} \\
+\hline
+\multicolumn{4}{|c|}{\textit{Runway Gen-4.5 (wideo AI)}} \\
+\hline
+runway\_gen45\_clip\_02\_runway\_h264.mp4 & 8,1 MB & Syntetyczny & Runway Gen-4.5 \\
+runway\_gen45\_clip\_03\_runway\_h264.mp4 & 8,1 MB & Syntetyczny & Runway Gen-4.5 \\
+runway\_gen45\_clip\_04\_runway\_h264.mp4 & 6,4 MB & Syntetyczny & Runway Gen-4.5 \\
+runway\_gen45\_clip\_05\_runway\_h264.mp4 & 2,2 MB & Syntetyczny & Runway Gen-4.5 \\
+\hline
+\multicolumn{4}{|c|}{\textit{OpenAI Sora (wideo AI)}} \\
+\hline
+kobe\_tuition\_90k\_sora.mp4 & 326 KB & Syntetyczny & OpenAI Sora \\
+not\_let\_off\_plane\_sora.mp4 & 300 KB & Syntetyczny & OpenAI Sora \\
+doctor\_ankle\_sora.mp4 & 296 KB & Syntetyczny & OpenAI Sora \\
+1PaoWKvcJP0\_Sound\_on\_for\_Sora\_2.mp4 & 12,7 MB & Syntetyczny & OpenAI Sora \\
+\hline
+\multicolumn{4}{|c|}{\textit{Runway Gen-3/Gen-4 Turbo (wideo AI)}} \\
+\hline
+Gen-4\_Turbo\_candle\_flame.mp4 & 1,2 MB & Syntetyczny & Runway Gen-4 Turbo \\
+Abstract\_fluid\_simulation\_neon.mp4 & 780 KB & Syntetyczny & Runway Gen-3 \\
+AbEQv\_Water\_4k\_AI\_short\_film\_Gen3.mp4 & 10,3 MB & Syntetyczny & Runway Gen-3 \\
+AwKSrJFvdps\_Introducing\_Gen45.mp4 & 14,2 MB & Syntetyczny & Runway Gen-4.5 \\
+A\_dragon\_flying\_fantasy\_castle.mp4 & 481 KB & Syntetyczny & Runway Gen-3 \\
+A\_person\_running\_rainy\_street.mp4 & 1,1 MB & Syntetyczny & Runway Gen-3 \\
+\hline
+\multicolumn{4}{|c|}{\textit{Inne modele AI / materia\l{}y promocyjne}} \\
+\hline
+y2dynet9Gvg\_Text\_to\_Video\_Demo.mp4 & 3,6 MB & Syntetyczny & r\'{o}\.{z}ne modele \\
+Zb3tffmBPRE\_Luma\_Dream\_Machine.mp4 & 6,1 MB & Syntetyczny & Luma Dream Machine \\
+\hline
+\multicolumn{4}{|c|}{\textit{Materia\l{}y zmanipulowane i~deepfake}} \\
+\hline
+000000biden\_fake.mp4 & 3,6 MB & Deepfake & face-swap \\
+000000kot\_fake.mp4 & 2,7 MB & Zmanipulowany & -- \\
+000000passport\_fake.mp4 & 2,2 MB & Zmanipulowany & -- \\
+000000pilot\_fake.mp4 & 2,3 MB & Zmanipulowany & -- \\
+\hline
+\multicolumn{4}{|c|}{\textit{Materia\l{}y autentyczne (klasa negatywna)}} \\
+\hline
+000000biden\_real.mp4 & 3,3 MB & Autentyczny & nagranie kamerowe \\
+\hline
+\multicolumn{4}{|c|}{\textit{Materia\l{}y kontrolne (t\l{}o sieciowe)}} \\
+\hline
+\_gxXv5qlEdw\_BBC\_News\_Blooper.mp4 & 4,9 MB & Autentyczny & BBC News \\
+\_qi\_p3VXzCQ\_Lower\_Third\_Motion.mp4 & 3,4 MB & Autentyczny & motion graphics \\
+\hline
+\end{tabular}
+\end{table}
+
+Zbi\'{o}r sk\l{}ada si\k{e} z~\textbf{24~plik\'{o}w} (\l{}\k{a}cznie ok.\ 90~MB), w~tym:
+\begin{itemize}
+  \item \textbf{16 film\'{o}w w~pe\l{}ni generowanych przez AI} (Runway, Sora, Luma),
+  \item \textbf{4 materia\l{}y zmanipulowane lub deepfake},
+  \item \textbf{2 autentyczne nagrania kamerowe} (klasa negatywna),
+  \item \textbf{2 autentyczne materia\l{}y kontrolne} (motion graphics, nagranie BBC).
+\end{itemize}
+
+R\'{o}\.{z}norodno\'{s}\'{c} model\'{o}w generatywnych (Runway Gen-3, Gen-4, Gen-4.5,
+OpenAI Sora, Luma Dream Machine) oraz zr\'{o}\.{z}nicowanie rozmiar\'{o}w plik\'{o}w
+(od 296~KB do 14,2~MB) pozwala oceni\'{c} odporno\'{s}\'{c} narz\k{e}dzi na~r\'{o}\.{z}ne
+warunki kompresji i~styl generowania.
+
+% -------------------------------------------------------------------
+\section{Przegl\k{a}d istniej\k{a}cych narz\k{e}dzi internetowych}
+\label{sec:przeglad_narzedzi}
+
+Na rynku dost\k{e}pnych jest kilka publicznie dost\k{e}pnych serwis\'{o}w internetowych
+pretenduj\k{a}cych do detekcji tre\'{s}ci generowanych przez AI lub zmanipulowanych
+multimedi\'{o}w. W~niniejszej sekcji om\'{o}wiono narz\k{e}dzia testowane w~ramach
+niniejszej pracy: DetectVideo.ai oraz Undetectable.ai (wyniki omawiane w~kolejnej
+sekcji). Analiza obejmuje podej\'{s}cie techniczne, dost\k{e}pno\'{s}\'{c}, ograniczenia
+oraz wyniki na~zbiorze testowym.
+
+% -------------------------------------------------------------------
+\subsection{DetectVideo.ai}
+\label{sec:detectvideo}
+
+DetectVideo.ai to serwis internetowy oferuj\k{a}cy detekcj\k{e} film\'{o}w wideo pod k\k{a}tem
+pochodzenia z~modeli generatywnych AI. Narz\k{e}dzie zwraca wynik
+w~postaci procentowego prawdopodobie\'{n}stwa tego, \.{z}e przes\l{}any plik
+zosta\l{} wygenerowany lub zmanipulowany przez AI.
+
+\subsubsection{Wyniki na zbiorze testowym}
+
+Przeprowadzono test wszystkich 24~plik\'{o}w ze~zbioru opisanego
+w~sekcji~\ref{sec:zbior_danych}. Tabela~\ref{tab:detectvideo_results}
+przedstawia szczeg\'{o}\l{}owe wyniki.
+
+\begin{table}[H]
+\centering
+\caption{Wyniki DetectVideo.ai dla zbioru testowego}
+\label{tab:detectvideo_results}
+\small
+\begin{tabular}{|l|r|c|}
+\hline
+\textbf{Nazwa pliku} & \textbf{Rozmiar} & \textbf{Wynik AI likelihood} \\
+\hline
+\multicolumn{3}{|c|}{\textit{Runway Gen-4.5}} \\
+\hline
+runway\_gen45\_clip\_05 & 2,2 MB & 55\% \\
+runway\_gen45\_clip\_04 & 6,4 MB & 55\% \\
+runway\_gen45\_clip\_02 & 8,1 MB & 55\% \\
+runway\_gen45\_clip\_03 & 8,1 MB & 55\% \\
+\hline
+\multicolumn{3}{|c|}{\textit{OpenAI Sora}} \\
+\hline
+kobe\_tuition\_90k\_sora & 326 KB & 55\% \\
+not\_let\_off\_plane\_sora & 300 KB & 55\% \\
+doctor\_ankle\_sora & 296 KB & 55\% \\
+1PaoWKvcJP0\_Sora & 12,7 MB & 55\% \\
+\hline
+\multicolumn{3}{|c|}{\textit{Runway Gen-4 Turbo / Gen-3}} \\
+\hline
+Gen-4\_Turbo\_candle\_flame & 1,2 MB & 55\% \\
+Abstract\_fluid\_simulation\_neon & 780 KB & \textbf{72\%} \\
+AbEQv\_Water\_4k\_AI\_short\_film\_Gen3 & 10,3 MB & \textbf{72\%} \\
+A\_dragon\_flying\_fantasy\_castle & 481 KB & \textbf{72\%} \\
+A\_person\_running\_rainy\_street & 1,1 MB & \textbf{72\%} \\
+AwKSrJFvdps\_Gen45\_promo & 14,2 MB & 55\% \\
+\hline
+\multicolumn{3}{|c|}{\textit{Inne modele AI}} \\
+\hline
+y2dynet9Gvg\_Text\_to\_Video\_Demo & 3,6 MB & 55\% \\
+Zb3tffmBPRE\_Luma\_Dream\_Machine & 6,1 MB & 55\% \\
+\hline
+\multicolumn{3}{|c|}{\textit{Deepfake i zmanipulowane}} \\
+\hline
+000000biden\_fake & 3,6 MB & 55\% \\
+000000kot\_fake & 2,7 MB & 55\% \\
+000000passport\_fake & 2,2 MB & \textbf{72\%} \\
+000000pilot\_fake & 2,3 MB & 55\% \\
+\hline
+\multicolumn{3}{|c|}{\textit{Autentyczne (klasa negatywna)}} \\
+\hline
+000000biden\_real & 3,3 MB & 55\% \\
+\_gxXv5qlEdw\_BBC\_News\_Blooper & 4,9 MB & 55\% \\
+\_qi\_p3VXzCQ\_Lower\_Third\_Motion & 3,4 MB & 55\% \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Analiza wynik\'{o}w}
+
+Wyniki przedstawione w~tabeli~\ref{tab:detectvideo_results} ujawniaj\k{a}
+istotne ograniczenia narz\k{e}dzia. Serwis DetectVideo.ai zwr\'{o}ci\l{} wynik
+\textbf{55\%} (,,AI likelihood'') dla \textbf{20 z~24~plik\'{o}w} (83\%),
+w~tym r\'{o}wnie\.{z} dla pliku \texttt{000000biden\_real.mp4} --- autentycznego
+nagrania kamerowego. Oznacza to, \.{z}e wynik 55\% stanowi~de~facto domy\'{s}lny
+odpowied\'{z} narz\k{e}dzia w~przypadku braku pewno\'{s}ci --- jest to~wynik
+,,nie wiem'', a~nie faktyczna ocena.
+
+Wy\.{z}szy wynik (72\%) zosta\l{} przyznany jedynie 5~filmom:
+\begin{itemize}
+  \item materia\l{}om z~oczywistymi cechami generatywnymi
+        (abstrakcyjna animacja p\l{}yn\'{o}w, smok lataj\k{a}cy nad zamkiem,
+        efektowne AI city scene);
+  \item filmowi promocyjnemu Runway Gen-3 (\textit{Water});
+  \item sfalsyfikowanemu dokumentowi (\texttt{passport\_fake}) ---
+        wskazanemu jako manipulowany dzi\k{e}ki analizie metadanych,
+        a~nie tre\'{s}ci wizualnej.
+\end{itemize}
+
+Diagnoza jest jednoznaczna: \textbf{DetectVideo.ai jest praktycznie bezużyteczny
+jako detektor film\'{o}w AI w~przypadku trudnych, nowych modeli generatywnych
+(Runway Gen-4.5, OpenAI Sora)}. Narz\k{e}dzie nie potrafi odr\'{o}\.{z}ni\'{c}
+autentycznego nagrania od syntetycznego w~80\% przypadk\'{o}w i~zwraca
+domy\'{s}lny wynik ,,inconclusive'' zamiast podj\k{a}\'{c} decyzj\k{e}. Dla
+niniejszego detektora fakt ten stanowi wa\.{z}ny punkt odniesienia~---
+proponowane rozwi\k{a}zanie podejmuje jednoznaczn\k{a} decyzj\k{e} binarny dla
+ka\.{z}dego pliku.
+
+% Tutaj mozna wstawic zrzut ekranu interfejsu DetectVideo.ai
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.85\textwidth]{figures/detectvideo_screenshot.png}
+%   \caption{Interfejs DetectVideo.ai z wynikiem dla pliku 000000passport\_fake.mp4 (72\% AI likelihood)}
+%   \label{fig:detectvideo_screenshot}
+% \end{figure}
+
+% -------------------------------------------------------------------
+\subsection{Undetectable.ai}
+\label{sec:undetectable}
+
+% Sekcja zostanie uzupelniona po otrzymaniu wynikow z Undetectable.ai
+\textit{Wyniki dla narz\k{e}dzia Undetectable.ai zostan\k{a} om\'{o}wione
+po zakończeniu test\'{o}w na zbiorze danych.}
+
+% -------------------------------------------------------------------
+\section{Por\'{o}wnanie narz\k{e}dzi}
+\label{sec:porownanie}
+
+\subsection{Zalety i~wady analizowanych narz\k{e}dzi internetowych}
+\label{sec:zalety_wady_internet}
+
+Na podstawie przeprowadzonych test\'{o}w sformu\l{}owano nast\k{e}puj\k{a}c\k{a}
+charakterystyk\k{e} dost\k{e}pnych narz\k{e}dzi komercyjnych:
+
+\begin{table}[H]
+\centering
+\caption{Por\'{o}wnanie komercyjnych narz\k{e}dzi detekcji}
+\label{tab:porownanie_narzedzi}
+\small
+\begin{tabular}{|p{3.5cm}|p{5.5cm}|p{5.5cm}|}
+\hline
+\textbf{Narz\k{e}dzie} & \textbf{Zalety} & \textbf{Wady} \\
+\hline
+DetectVideo.ai &
+Prosty w~u\.{z}yciu, brak rejestracji, obs\l{}uguje popularne formaty wideo,
+mo\.{z}liwe wskazanie sygna\l{}u metadanych &
+80\% wynik\'{o}w to inconclusive 55\%; nie r\'{o}\.{z}nicuje nowych modeli
+(Sora, Gen-4.5); brak wyja\'{s}nienia decyzji (XAI); faz wynik daje si\k{e}
+zinterpretowa\'{c} jedynie jako ,,nie wiem'' \\
+\hline
+Undetectable.ai &
+Znany z~detekcji tekstu AI; popularny w\'{s}r\'{o}d u\.{z}ytkownik\'{o}w &
+G\l{}\'ownie przeznaczony do~tekstu; wsparcie wideo ograniczone;
+wyniki do uzupe\l{}nienia \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Zalety i~wady proponowanego detektora}
+\label{sec:zalety_wady_wlasny}
+
+Proponowane w~niniejszej pracy podej\'{s}cie opiera si\k{e} na~fuzji
+wielokana\l{}owej: analizy spektralnej (FFT), przep\l{}ywu optycznego
+oraz metadanych. Poni\.{z}ej zestawiono jego g\l{}\'{o}wne w\l{}a\'{s}ciwo\'{s}ci.
+
+\paragraph{Zalety}
+\begin{itemize}
+  \item \textbf{Decyzja binarna} --- detektor zawsze podejmuje jednoznaczn\k{a}
+        decyzj\k{e} (AI / nie AI), eliminuj\k{a}c nierozstrzygni\k{e}te wyniki.
+  \item \textbf{Wielosygna\l{}owo\'{s}\'{c}} --- po\l{}\k{a}czenie cech spektralnych,
+        przep\l{}ywu optycznego i~metadanych zwi\k{e}ksza odporno\'{s}\'{c}
+        na~manipulacje pojedynczym kana\l{}em.
+  \item \textbf{Interpretowalny wynik} --- ka\.{z}da decyzja zawiera wag\k{e}
+        sk\l{}adowych sygna\l{}\'{o}w, co umo\.{z}liwia analiz\k{e} przyczynow\k{a}.
+  \item \textbf{Brak zale\.{z}no\'{s}ci od chmury} --- mo\.{z}liwo\'{s}\'{c} uruchomienia
+        lokalnie, co istotne w~kontekstach wymagaj\k{a}cych prywatno\'{s}ci danych.
+  \item \textbf{Skalowalny na nowe modele} --- po przetrenowaniu na~nowych danych
+        mo\.{z}na dostosowa\'{c} do kolejnych generacji modeli AI.
+\end{itemize}
+
+\paragraph{Wady i~ograniczenia}
+\begin{itemize}
+  \item \textbf{Czuło\'{s}\'{c} na kompresj\k{e}} --- silna kompresja H.264/H.265
+        mo\.{z}e wyt\l{}umi\'{c} sygna\l{}y spektralne.
+  \item \textbf{Kr\'{o}tkie klipy} --- pliki poni\.{z}ej 5~sekund dostarczaj\k{a}
+        niewystarczaj\k{a}cej liczby klatek do rzetelnej analizy przep\l{}ywu
+        optycznego.
+  \item \textbf{Zasoby obliczeniowe} --- analiza wielokana\l{}owa wymaga
+        wi\k{e}kszej mocy obliczeniowej ni\.{z} proste narz\k{e}dzia oparte
+        na~metadanych.
+  \item \textbf{Ograniczenia generalizacji} --- narz\k{e}dzie mo\.{z}e gorzej
+        dzia\l{}a\'{c} na~modelach generatywnych nieobj\k{e}tych zbiorem treningowym.
+\end{itemize}
