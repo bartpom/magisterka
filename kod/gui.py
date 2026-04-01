@@ -296,12 +296,15 @@ class GripSplitter(QSplitter):
 
 class ClampedHeader(QHeaderView):
     """
-    QHeaderView z twardym ograniczeniem min/max szerokości per kolumna.
+    QHeaderView z twardym ograniczeniem min/max szerokości per kolumna
+    oraz blokadą przed przekroczeniem sumarycznej szerokości viewportu tabeli.
 
     Mechanizm:
-    - sectionResized (sygnał Qt) → _on_section_resized → natychmiastowy clamp
+    - sectionResized (sygnał Qt) → _on_section_resized → clamp per-kolumna + clamp do viewportu
     - mouseMoveEvent / mouseReleaseEvent → dodatkowe zabezpieczenie
     - _guard chroni przed rekurencją (clamp wywołuje resizeSection → sygnał → clamp...)
+
+    Efekt: nie można rozciągnąć kolumn poza pionową kreską (granicą lewego panelu).
     """
 
     def __init__(self, orientation, min_widths: list[int], max_widths: list[int], parent=None):
@@ -315,13 +318,33 @@ class ClampedHeader(QHeaderView):
         # Podpięcie pod sygnał sectionResized — to jest główna linia obrony
         self.sectionResized.connect(self._on_section_resized)
 
+    def _viewport_width(self) -> int:
+        """Zwraca szerokość viewportu tabeli-rodzica (to jest faktyczny dostępny obszar)."""
+        parent = self.parentWidget()
+        if parent is not None and hasattr(parent, "viewport"):
+            return parent.viewport().width()  # type: ignore[union-attr]
+        return self.width()
+
     def _on_section_resized(self, logical_index: int, _old_size: int, new_size: int) -> None:
         """Wywoływane przez Qt przy każdej zmianie szerokości sekcji."""
         if self._guard:
             return
+        # 1) Clamp per-kolumna (min/max z listy)
         mn = self._min_w[logical_index] if logical_index < len(self._min_w) else 40
         mx = self._max_w[logical_index] if logical_index < len(self._max_w) else 9999
         clamped = max(mn, min(mx, new_size))
+
+        # 2) Clamp do viewportu — suma wszystkich kolumn nie może przekroczyć szerokości viewportu
+        viewport_w = self._viewport_width()
+        if viewport_w > 0:
+            total_other = sum(
+                self.sectionSize(i)
+                for i in range(self.count())
+                if i != logical_index
+            )
+            max_for_this = max(mn, viewport_w - total_other)
+            clamped = min(clamped, max_for_this)
+
         if clamped != new_size:
             self._guard = True
             try:
@@ -330,16 +353,26 @@ class ClampedHeader(QHeaderView):
                 self._guard = False
 
     def _clamp_all(self) -> None:
-        """Wymusza limity na wszystkich kolumnach naraz."""
+        """Wymusza limity na wszystkich kolumnach naraz (min/max + viewport)."""
         if self._guard:
             return
         self._guard = True
         try:
+            viewport_w = self._viewport_width()
             for col in range(self.count()):
                 w = self.sectionSize(col)
                 mn = self._min_w[col] if col < len(self._min_w) else 40
                 mx = self._max_w[col] if col < len(self._max_w) else 9999
                 clamped = max(mn, min(mx, w))
+                # Dodatkowy clamp do viewportu dla każdej kolumny
+                if viewport_w > 0:
+                    total_other = sum(
+                        self.sectionSize(i)
+                        for i in range(self.count())
+                        if i != col
+                    )
+                    max_for_col = max(mn, viewport_w - total_other)
+                    clamped = min(clamped, max_for_col)
                 if clamped != w:
                     self.resizeSection(col, clamped)
         finally:
@@ -876,6 +909,11 @@ class MainWindow(QMainWindow):
         clamped_hh.setStretchLastSection(False)
         self.table_results.setHorizontalHeader(clamped_hh)
         clamped_hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+
+        # Wyłącz poziomy scrollbar — kolumny nie mogą wychodzić poza viewport
+        self.table_results.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
 
         _default_col_widths = [200, 55, 130, 160, 60, 200]
         for col, w in enumerate(_default_col_widths):
