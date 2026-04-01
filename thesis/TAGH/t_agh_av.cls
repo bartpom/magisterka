@@ -9,44 +9,38 @@
 \LoadClass[a4paper,twoside,openright]{report}
 
 %% Packages
-\RequirePackage{fontspec} % XeLaTeX
-\RequirePackage{geometry} % page setup
-\RequirePackage{graphicx} % image support
-\RequirePackage{setspace} % inter line
-\RequirePackage{xcolor} % driver-independent color
-\RequirePackage{fancyhdr} % Control of page headers and footers
-\RequirePackage{titlesec} % Select alternative section titles
-\RequirePackage{mathtools} % Mathematical tools to use with amsmath
+\RequirePackage{fontspec}
+\RequirePackage{geometry}
+\RequirePackage{graphicx}
+\RequirePackage{setspace}
+\RequirePackage{xcolor}
+\RequirePackage{fancyhdr}
+\RequirePackage{titlesec}
+\RequirePackage{mathtools}
 \RequirePackage{amsfonts,amsmath,amsthm}
-
-%% to check
 \RequirePackage{url}
-\RequirePackage{tocloft} %Control table of contents, figures
-
+\RequirePackage{tocloft}
 \RequirePackage[font=small, labelfont=bf, labelsep=period]{caption}
 \RequirePackage{subcaption}
 \RequirePackage{siunitx}
 \RequirePackage{enumerate}
 \RequirePackage{enumitem}
 \RequirePackage[all,defaultlines=2]{nowidow}
-
 \RequirePackage[english,polish]{babel}
 \RequirePackage[
-style=numeric,
-sorting=none,
-language=autobib,
-autolang=other,
-urldate=iso,
-backref=false,
-isbn=true,
-url=false,
-maxbibnames=9,
-seconds=true,
-backend=biber
+  style=numeric,
+  sorting=none,
+  language=autobib,
+  autolang=other,
+  urldate=iso,
+  backref=false,
+  isbn=true,
+  url=false,
+  maxbibnames=9,
+  seconds=true,
+  backend=biber
 ]{biblatex}
-
 \RequirePackage{csquotes}
-
 \RequirePackage{courier}
 \RequirePackage{listings}
 \RequirePackage{array}
@@ -56,60 +50,56 @@ backend=biber
 \RequirePackage{makecell}
 \RequirePackage[flushleft]{threeparttable}
 
-%% Settings
-
+%% lstset
 \lstloadlanguages{TeX}
 \lstset{
-literate={ą}{{\k{a}}}1
-{ć}{{\'{c}}}1
-{ę}{{\k{e}}}1
-{ó}{{\'{o}}}1
-{ń}{{\'{n}}}1
-{ł}{{\l{}}}1
-{ś}{{\'{s}}}1
-{ź}{{\'{z}}}1
-{ż}{{\.z}}1
-{Ą}{{\k{A}}}1
-{Ć}{{\'{C}}}1
-{Ę}{{\k{E}}}1
-{Ó}{{\'{O}}}1
-{Ń}{{\'{N}}}1
-{Ł}{{\L{}}}1
-{Ś}{{\'{S}}}1
-{Ź}{{\'{Z}}}1
-{Ż}{{\.Z}}1,
-basicstyle=\footnotesize\ttfamily,
+  literate=
+    {a}{{\k{a}}}1
+    {c}{{\'{c}}}1
+    {e}{{\k{e}}}1
+    {o}{{\'{o}}}1
+    {n}{{\'{n}}}1
+    {l}{{\l{}}}1
+    {s}{{\'{s}}}1
+    {z}{{\'{z}}}1
+    {z}{{\.z}}1
+    {A}{{\k{A}}}1
+    {C}{{\'{C}}}1
+    {E}{{\k{E}}}1
+    {O}{{\'{O}}}1
+    {N}{{\'{N}}}1
+    {L}{{\L{}}}1
+    {S}{{\'{S}}}1
+    {Z}{{\'{Z}}}1
+    {Z}{{\.Z}}1,
+  basicstyle=\footnotesize\ttfamily,
 }
 
-% defines the X column to use m (\parbox[c]) instead of p
 \newcolumntype{C}[1]{>{\hsize=#1\hsize\centering\arraybackslash}X}
-
 \setlength{\cftsecnumwidth}{10mm}
-
 \setcounter{secnumdepth}{4}
 \brokenpenalty=10000\relax
 
-\fancypagestyle{plain}{
-\fancyhf{}
-\renewcommand{\headrulewidth}{0pt}
-\renewcommand{\footrulewidth}{0pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
 }
 
 \setcounter{tocdepth}{2}
-
 \setmainfont{Times New Roman}
 \setstretch{1.5}
 \geometry{
-a4paper,
-lmargin=30mm,
-rmargin=20mm,
-tmargin=30mm,
-bmargin=30mm,
-foot=10mm,
-head=10mm
+  a4paper,
+  lmargin=30mm,
+  rmargin=20mm,
+  tmargin=30mm,
+  bmargin=30mm,
+  foot=10mm,
+  head=10mm
 }
 
-%% user variables
+%% User variables
 \newcommand*\titlePL[1]{\def\@titlePL{#1}}
 \newcommand*\titleEN[1]{\def\@titleEN{#1}}
 \def\shorttitlePL#1 {\gdef\@shorttitlePL{#1}}
@@ -124,121 +114,153 @@ head=10mm
 
 \renewcommand{\labelitemi}{--}
 
-\DeclareOption{pl}{
-\def\thesisheaders{
-\fancyfoot[LE,RO]{\small \@shortauthor\quad\textit{\@shorttitlePL}}
-}
-\def\thesistable{
-\begin{tabular}{p{45mm}l}
-Autor: & {\itshape \@author}\\[-1mm]
-Kierunek studi\'{o}w: & {\itshape \@degreeprogramme}\\[-1mm]
-Opiekun pracy: & {\itshape \@supervisor}\\
-\end{tabular}
-}
+\DeclareOption{pl}{%
+  \def\thesisheaders{%
+    \fancyfoot[LE,RO]{\small \@shortauthor\quad\textit{\@shorttitlePL}}%
+  }
+  \def\thesistable{%
+    \begin{tabular}{p{45mm}l}
+      Autor:                    & {\itshape \@author}         \\[-1mm]
+      Kierunek studi\'{o}w:     & {\itshape \@degreeprogramme}\\[-1mm]
+      Opiekun pracy:            & {\itshape \@supervisor}     \\
+    \end{tabular}%
+  }
 }
 
-\DeclareOption{en}{
-\def\thesisheaders{
-\fancyfoot[LE,RO]{\small \@shortauthor\quad\textit{\@shorttitleEN}}
-}
-\def\thesistable{
-\begin{tabular}{p{45mm}l}
-Author: & {\itshape \@author}\\[-1mm]
-Degree programme: & {\itshape \@degreeprogramme}\\[-1mm]
-Supervisor: & {\itshape \@supervisor}\\
-\end{tabular}
-}
+\DeclareOption{en}{%
+  \def\thesisheaders{%
+    \fancyfoot[LE,RO]{\small \@shortauthor\quad\textit{\@shorttitleEN}}%
+  }
+  \def\thesistable{%
+    \begin{tabular}{p{45mm}l}
+      Author:           & {\itshape \@author}         \\[-1mm]
+      Degree programme: & {\itshape \@degreeprogramme}\\[-1mm]
+      Supervisor:       & {\itshape \@supervisor}     \\
+    \end{tabular}%
+  }
 }
 
 \ProcessOptions
 
 \newcommand{\titlepages}{%
-\newpage \titlepage
-\begin{center}
-\vspace*{0mm}
-\includegraphics[scale=0.6]{TAGH/agh}
-\vspace*{2mm}
-{\sffamily{\large{\bfseries{\scshape AGH University of Krakow}}}
-\vspace*{1mm}
-{\small\bfseries \MakeUppercase{\@faculty}}}
-\vspace*{8mm}
-{\sffamily\Large \@thesistype}
-\vspace*{9mm}
-{\sffamily\Large\itshape \@titleEN}
-\vspace*{1mm}
-{\sffamily\Large\itshape \@titlePL}
-\vspace{20mm}
-\end{center}
-\noindent
-{\sffamily
-\thesistable
-}
-\vspace*{9mm}
-\centerline{\small\sffamily Krak\'{o}w, \@date}
-\clearpage
-\thispagestyle{empty}
-{~~}\vspace{20mm}
+  \newpage\titlepage
+  \begin{center}
+    \vspace*{0mm}
+    \includegraphics[scale=0.6]{TAGH/agh}
+    \vspace*{2mm}
 
-{\large Uprzedzony o~odpowiedzialno\'sci karnej na~podstawie art.~115 ust.~1~i~2 ustawy z~dnia 4~lutego 1994~r. o~prawie autorskim i~prawach pokrewnych (t.j. Dz.U. z~2006~r. Nr~90, poz.~631 z~p{\'o}{\'z}n. zm.): ,,Kto przyw\l{}aszcza sobie autorstwo albo~wprowadza w~b\l{}\k{a}d co~do~autorstwa ca\l{}o\'sci lub cz\k{e}\'sci cudzego utworu albo~artystycznego wykonania, podlega grzywnie, karze ograniczenia wolno\'sci albo~pozbawienia wolno\'sci do~lat~3. Tej~samej karze podlega, kto~rozpowszechnia bez~podania nazwiska lub~pseudonimu tw\'orcy cudzy utw\'or w~wersji oryginalnej albo~w~postaci opracowania, artystycznego wykonania albo~publicznie zniekszta\l{}ca taki utw\'or, artystyczne wykonanie, fonogram, wideogram lub nadanie.'', a~tak\.ze uprzedzony o~odpowiedzialno\'sci dyscyplinarnej na~podstawie art.~211 ust.~1 ustawy z~dnia 27~lipca 2005~r. Prawo o~szkolnictwie wy\.zszym (t.j. Dz.~U. z~2012~r. poz.~572, z~p\'o\'zn. zm.): ,,Za~naruszenie przepis\'ow obowi\k{a}zuj\k{a}cych w~uczelni oraz~za~czyny uchybiaj\k{a}ce godno\'sci studenta student ponosi odpowiedzialno\'s\'c dyscyplinarn\k{a} przed komisj\k{a} dyscyplinarn\k{a} albo~przed s\k{a}dem kole\.ze\'nskim samorz\k{a}du studenckiego, zwanym dalej <>.'', o\'swiadczam, \.ze~niniejsz\k{a} prac\k{e} dyplomow\k{a} wykona\l{}em(-am) osobi\'scie i~samodzielnie i~\.ze~nie~korzysta\l{}em(-am) ze~\'zr\'ode\l{} innych ni\.z~wymienione w pracy. }
+    {\sffamily
+      {\large\bfseries\scshape AGH University of Krakow}\par
+      \vspace*{1mm}
+      {\small\bfseries \MakeUppercase{\@faculty}}\par
+    }
+    \vspace*{8mm}
 
-\clearpage \titlepage
+    {\sffamily\Large \@thesistype}\par
+    \vspace*{9mm}
 
-\setcounter{page}{5}
+    {\sffamily\Large\itshape \@titleEN}\par
+    \vspace*{1mm}
+    {\sffamily\Large\itshape \@titlePL}\par
+    \vspace{20mm}
+  \end{center}
 
-\pagestyle{fancy}
-\renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ #1}{}}
-\renewcommand{\sectionmark}[1]{\markright{\thesection.\ #1}}
-\renewcommand{\headrulewidth}{0.5pt}
-\renewcommand{\footrulewidth}{0.5pt}
-\fancyhf{}
-\fancyhead{}
-\fancyhead[RE,LO]{\slshape{\small \rightmark}}
-\fancyhead[RO,LE]{\bfseries \thepage}
+  \noindent
+  {\sffamily\thesistable}
+  \vspace*{9mm}
 
-\thesisheaders
+  \centerline{\small\sffamily Krak\'{o}w, \@date}
 
-\frenchspacing
-\sloppy
-\flushbottom
+  \clearpage
+  \thispagestyle{empty}
 
-\titleformat{\chapter}[block]
-{\bfseries\LARGE}{\filright \LARGE\thechapter. }{0ex}{}
-\titlespacing{\chapter}{0pt}{17mm}{19mm}
-\titleformat{\section}[block]
-{\bfseries\Large}{\filright \Large\thesection. }{0ex}{}
-\titlespacing{\section}{7mm}{8mm plus 0mm minus 1mm}{4mm plus 0mm minus 1mm}
-\titleformat{\subsection}[block]
-{\bfseries\large}{\filright \large\thesubsection. }{0ex}{}
-\titlespacing{\subsection}{7mm}{6mm}{2.5mm}
-\titleformat{\subsubsection}[block]
-{\bfseries\normalsize}{\filright \normalsize\thesubsubsection. }{0ex}{}
-\titlespacing{\subsubsection}{7mm}{3mm}{1.5mm}
+  {~~}\vspace{20mm}
 
-\renewcommand{\cfttoctitlefont}{\bfseries\Large}
-\renewcommand{\cftbeforetoctitleskip}{20mm}
-\renewcommand{\cftaftertoctitleskip}{19mm}
-\renewcommand{\cftchapleader}{\cftdotfill{\cftdot}}
-\renewcommand{\cftsecleader}{\cftdotfill{\cftdot}}
-\renewcommand{\cftsubsecleader}{\cftdotfill{\cftdot}}
-\renewcommand{\cftchapaftersnum}{.}
-\renewcommand{\cftsecaftersnum}{.}
-\renewcommand{\cftsubsecaftersnum}{.}
-\setlength{\cftparskip}{2pt}
-\setlength{\cftbeforechapskip}{0mm}
-\renewcommand{\cftchappagefont}{\normalsize}
+  {\large
+    Uprzedzony o~odpowiedzialno\'sci karnej na~podstawie art.~115 ust.~1~i~2
+    ustawy z~dnia 4~lutego 1994~r. o~prawie autorskim i~prawach pokrewnych
+    (t.j. Dz.U. z~2006~r. Nr~90, poz.~631 z~p{\'o}{\'z}n.\ zm.):
+    ,,Kto przyw\l{}aszcza sobie autorstwo albo~wprowadza w~b\l{}\k{a}d
+    co~do~autorstwa ca\l{}o\'sci lub cz\k{e}\'sci cudzego utworu albo~artystycznego
+    wykonania, podlega grzywnie, karze ograniczenia wolno\'sci albo~pozbawienia
+    wolno\'sci do~lat~3. Tej~samej karze podlega, kto~rozpowszechnia bez~podania
+    nazwiska lub~pseudonimu tw\'orcy cudzy utw\'or w~wersji oryginalnej albo~w~postaci
+    opracowania, artystycznego wykonania albo~publicznie zniekszta\l{}ca taki utw\'or,
+    artystyczne wykonanie, fonogram, wideogram lub nadanie.'',
+    a~tak\.ze uprzedzony o~odpowiedzialno\'sci dyscyplinarnej na~podstawie art.~211
+    ust.~1 ustawy z~dnia 27~lipca 2005~r.\ Prawo o~szkolnictwie wy\.zszym
+    (t.j.\ Dz.~U. z~2012~r.\ poz.~572, z~p\'o\'zn.\ zm.):
+    ,,Za~naruszenie przepis\'ow obowi\k{a}zuj\k{a}cych w~uczelni oraz~za~czyny
+    uchybiaj\k{a}ce godno\'sci studenta student ponosi odpowiedzialno\'s\'c
+    dyscyplinarn\k{a} przed komisj\k{a} dyscyplinarn\k{a} albo~przed
+    s\k{a}dem kole\.ze\'nskim samorz\k{a}du studenckiego, zwanym dalej
+    <>.'',
+    o\'swiadczam, \.ze~niniejsz\k{a} prac\k{e} dyplomow\k{a} wykona\l{}em(-am)
+    osobi\'scie i~samodzielnie i~\.ze~nie~korzysta\l{}em(-am) ze~\'zr\'ode\l{}
+    innych ni\.z~wymienione w~pracy.
+  }
 
+  \clearpage\titlepage
+
+  \setcounter{page}{5}
+
+  \pagestyle{fancy}
+  \renewcommand{\chaptermark}[1]{\markboth{\thechapter.\ ##1}{}}
+  \renewcommand{\sectionmark}[1]{\markright{\thesection.\ ##1}}
+  \renewcommand{\headrulewidth}{0.5pt}
+  \renewcommand{\footrulewidth}{0.5pt}
+  \fancyhf{}
+  \fancyhead[RE,LO]{\slshape{\small\rightmark}}
+  \fancyhead[RO,LE]{\bfseries\thepage}
+
+  \thesisheaders
+
+  \frenchspacing
+  \sloppy
+  \flushbottom
+
+  %% Formatowanie tytulow rozdzialow
+  \titleformat{\chapter}[block]
+    {\bfseries\LARGE}{\filright\LARGE\thechapter.\ }{0ex}{}
+  \titlespacing{\chapter}{0pt}{17mm}{19mm}
+  \titleformat{\section}[block]
+    {\bfseries\Large}{\filright\Large\thesection.\ }{0ex}{}
+  \titlespacing{\section}{7mm}{8mm plus 0mm minus 1mm}{4mm plus 0mm minus 1mm}
+  \titleformat{\subsection}[block]
+    {\bfseries\large}{\filright\large\thesubsection.\ }{0ex}{}
+  \titlespacing{\subsection}{7mm}{6mm}{2.5mm}
+  \titleformat{\subsubsection}[block]
+    {\bfseries\normalsize}{\filright\normalsize\thesubsubsection.\ }{0ex}{}
+  \titlespacing{\subsubsection}{7mm}{3mm}{1.5mm}
+
+  %% Spis tresci
+  \renewcommand{\cfttoctitlefont}{\bfseries\Large}
+  \renewcommand{\cftbeforetoctitleskip}{20mm}
+  \renewcommand{\cftaftertoctitleskip}{19mm}
+  \renewcommand{\cftchapleader}{\cftdotfill{\cftdot}}
+  \renewcommand{\cftsecleader}{\cftdotfill{\cftdot}}
+  \renewcommand{\cftsubsecleader}{\cftdotfill{\cftdot}}
+  \renewcommand{\cftchapaftersnum}{.}
+  \renewcommand{\cftsecaftersnum}{.}
+  \renewcommand{\cftsubsecaftersnum}{.}
+  \setlength{\cftparskip}{2pt}
+  \setlength{\cftbeforechapskip}{0mm}
+  \renewcommand{\cftchappagefont}{\normalsize}
+}% END \titlepages
+
+%% Ustawienia liczb
 \sisetup{
-output-decimal-marker = {,},
-group-separator={~},
+  output-decimal-marker = {,},
+  group-separator={~},
 }
 
 \renewcommand\UrlFont{\rmfamily\itshape}
 
 \captionsetup[subfigure]{labelfont=md}
 \captionsetup{%
-subrefformat=parens,
-margin=2cm,
-singlelinecheck=on,
+  subrefformat=parens,
+  margin=2cm,
+  singlelinecheck=on,
 }
 
 \SetLabelAlign{parright}{\parbox[t]{\labelwidth}{\raggedleft#1}}
@@ -247,14 +269,15 @@ singlelinecheck=on,
 \newlength{\descriptiondashgap}
 \setlength{\descriptiondashgap}{0.5em}
 
-\renewcommand*\descriptionlabel[1]{\hspace \labelsep \normalfont \bfseries #1 \mdseries\hspace{\descriptiondashgap}--\hspace{\descriptiondashgap}}
+\renewcommand*\descriptionlabel[1]{%
+  \hspace\labelsep\normalfont\bfseries #1\mdseries
+  \hspace{\descriptiondashgap}--\hspace{\descriptiondashgap}%
+}
 
 \newlength{\eqwheremargin}
 \setlength{\eqwheremargin}{2cm}
 
 \newenvironment{eqwhere}[1][]
-{%
-\setlength{\eqwheremargin}{#1}%
-\begin{description}[leftmargin=\eqwheremargin, itemsep=0cm, labelsep=0cm]
-}
-{\end{description}}
+  {\setlength{\eqwheremargin}{#1}%
+   \begin{description}[leftmargin=\eqwheremargin, itemsep=0cm, labelsep=0cm]}
+  {\end{description}}
