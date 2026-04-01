@@ -1,0 +1,92 @@
+\chapter{Wnioski i kierunki dalszych badań}
+\label{chap:wnioski}
+
+\section{Podsumowanie wyników}
+
+Celem niniejszej pracy była analiza narzędzi i metod wykrywania treści generowanych
+przez sztuczną inteligencję w obszarze multimediów wideo, ze szczególnym uwzględnieniem
+praktycznej skuteczności dostępnych detektorów oraz zaproponowanie podejścia
+wielosygnałowego jako alternatywy dla rozwiązań komercyjnych.
+
+Przeprowadzone eksperymenty wykazały, że popularne narzędzie DetectVideo.ai zwraca
+wynik 55\% (inconclu\-sive) dla ponad 80\% testowanych materiałów, w tym dla nagrań
+autentycznych, co czyni je praktycznie bezużytecznym do binarnej klasyfikacji treści.
+Jedynie filmy o wyraźnych artefaktach wizualnych typowych dla generatywnych
+modeli (np.\ abstrakcyjne symulacje płynów, sceny fantasy) uzyskały wynik 72\%,
+co nadal nie przekracza przyjętego w literaturze progu pewności detekcji.
+Proponowane podejście wielosygnałowe --- łączące analizę spektralną, przepływ
+optyczny oraz analizę metadanych --- wykazuje zdolność do podjęcia jednoznacznej
+decyzji binarnej dla każdego badanego pliku, co stanowi jego kluczową przewagę
+praktyczną.
+
+\section{Kierunki dalszych badań}
+
+Niniejsza praca stanowi punkt wyjścia do szeroko zakrojonych badań w obszarze
+detekcji multimediów generowanych przez AI. Poniżej przedstawiono kierunki,
+które zdaniem autora posiadają największy potencjał naukowy i praktyczny.
+
+\subsection{Rozszerzenie zbioru danych testowych}
+
+Podstawowym ograniczeniem przeprowadzonych eksperymentów jest stosunkowo niewielki
+zbiór 24 plików wideo. Dalsze badania powinny obejmować:
+
+\begin{itemize}
+  \item \textbf{Większe zbiory darmowe} --- takie jak FaceForensics++~\cite{Rossler2019FaceForensics},
+        DFDC (Deepfake Detection Challenge Dataset) czy WildDeepfake, liczące dziesiątki
+        tysięcy klipów z różnymi technikami syntezy;
+  \item \textbf{Płatne bazy danych} --- komercyjne zbiory, np.\ oferowane przez Veritone
+        lub Nielsen, zawierające materiały z kontrolowanymi metadanymi produkcji,
+        co umożliwia precyzyjną weryfikację etykiet;
+  \item \textbf{Materiały z platform społecznościowych} --- filmy pobrane z TikToka,
+        YouTube Shorts i Instagrama, które przeszły przez agresywną rekompresję
+        transkodowania platformy, stanowiącą jedno z najtrudniejszych wyzwań
+        dla detektorów sygnałowych;
+  \item \textbf{Zróżnicowanie modeli generatywnych} --- włączenie materiałów z nowszych
+        modeli (Sora 2, Runway Gen-5, Kling, Pika 2.0) w miarę ich dostępności,
+        aby śledzić ewolucję artefaktów.
+\end{itemize}
+
+\subsection{Ewaluacja płatnych narzędzi komercyjnych}
+
+W ramach niniejszej pracy przetestowano wyłącznie narzędzia dostępne bezpłatnie.
+Pełna analiza porównawcza powinna objąć płatne rozwiązania klasy enterprise, takie jak:
+SynthID Detector (Google DeepMind), Hive Moderation, Reality Defender oraz Intel
+FakeCatcher. Szczególnie interesujące byłoby zbadanie, czy wyższy koszt subskrypcji
+przekłada się na rzeczywistą poprawę czułości w stosunku do proponowanego
+podejścia wielosygnałowego.
+
+\subsection{Odporność na ataki adwersarialne}
+
+Praktyczny detektor musi być odporny na celowe działania twórców deepfake'ów.
+Kierunkiem wartym zbadania jest testowanie detektora wobec technik adversarial,
+takich jak dodawanie szumu gaussowskiego przed publikacją, kompresja
+H.265 z niskim bitrate oraz preprocessing przez filtry stylistyczne
+(np.\ efekt ,,film grain'').
+Badania w tym obszarze pozwolą na identyfikację najsłabszych ogniw proponowanego
+potoku i ukierunkowanie dalszych prac na ich wzmocnienie.
+
+\subsection{Metody uczenia maszynowego}
+
+Obecna implementacja opiera się na metodach sygnałowych opartych na
+regułach heurystycznych. Naturalnym kierunkiem rozwoju jest zastąpienie
+lub uzupełnienie modułu decyzyjnego klasyfikatorem uczonym nadzorowanym ---
+np.\ lekką siecią CNN na cechach spektralnych lub modelem XGBoost
+na wektorze cech numerycznych --- co potencjalnie zwiększy zdolność generalizacji
+na nowych modelach generatywnych bez konieczności ręcznej aktualizacji progów.
+
+\subsection{Detekcja w czasie rzeczywistym i integracja z platformami}
+
+Obecna architektura przetwarza pliki wsadowo. Kolejnym krokiem praktycznym
+byłoby opracowanie wersji strumieniowej zdolnej do analizy wideo na żywo
+(np.\ podczas transmisji na platformach streamingowych) lub wdrożonej jako
+wtyczka do CMS redakcyjnych, co odpowiada na rosnące zapotrzebowanie
+branży mediowej na narzędzia weryfikacji treści w czasie rzeczywistym.
+
+\subsection{Cyfrowe znaki wodne jako proaktywna ochrona}
+
+Obok reaktywnej detekcji warto rozwinąć badania nad proaktywnym
+oznaczaniem treści AI na poziomie modelu generatywnego (C2PA,
+SynthID). Analiza skuteczności przetrwania tych znaków po typowych
+operacjach edycyjnych (przycięcie, zmiana rozdzielczości, transkodowanie)
+stanowi otwarty problem badawczy z bezpośrednim przełożeniem na regulacje prawne UE
+dotyczące oznaczania treści syntetycznych~\cite{EUAIAct2024}.

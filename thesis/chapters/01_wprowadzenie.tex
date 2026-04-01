@@ -1,0 +1,36 @@
+\chapter{Wprowadzenie}
+
+Dynamiczny rozwój technologii generatywnej sztucznej inteligencji doprowadził do sytuacji, w której tworzenie fałszywych treści multimedialnych stało się dostępne dla szerokiego grona użytkowników bez specjalistycznej wiedzy technicznej.
+Narzędzia takie jak generatory wideo oparte na modelach dyfuzyjnych, systemy klonowania głosu czy generatory obrazów umożliwiają produkcję materiałów audiowizualnych o wysokim stopniu realizmu, trudnych do odróżnienia od autentycznych nagrań.
+Zjawisko to stanowi poważne zagrożenie dla bezpieczeństwa informacyjnego, integralności debaty publicznej oraz zaufania do mediów.
+
+Dezinformacja multimedialna -- rozumiana jako celowe rozpowszechnianie fałszywych lub zmanipulowanych treści wizualnych i dźwiękowych -- nie jest zjawiskiem nowym.
+Jednak postęp w dziedzinie uczenia głębokiego, w szczególności modeli GAN (ang.~\textit{Generative Adversarial Network}) oraz dyfuzji latentnej, znacząco obniżył próg wejścia dla twórców fałszywych materiałów i jednocześnie podniósł ich jakość do poziomu, który utrudnia wykrycie przy użyciu tradycyjnych metod analizy.
+Zjawisko powszechnie znane jako \textit{deepfake} ewoluowało od prostych podmian twarzy do kompleksowych syntez wideo, w których głos, mimika i kontekst narracyjny są generowane w całości przez modele sztucznej inteligencji.
+
+W odpowiedzi na te zagrożenia środowisko naukowe i przemysłowe intensywnie pracuje nad narzędziami detekcji fałszywych treści multimedialnych.
+Metody te obejmują zarówno klasyczne techniki analizy sygnału -- takie jak transformata Fouriera czy analiza przepływu optycznego -- jak i nowoczesne podejścia oparte na sieciach neuronowych, w tym konwolucyjnych sieciach CNN (ang.~\textit{Convolutional Neural Network}) i transformerach wizyjnych ViT (ang.~\textit{Vision Transformer}).
+Różnorodność stosowanych podejść, brak jednolitych standardów ewaluacji oraz szybkie tempo ewolucji technik generatywnych sprawiają, że ocena skuteczności dostępnych narzędzi pozostaje otwartym i istotnym problemem badawczym.
+
+\section*{Cel i zakres pracy}
+
+Celem niniejszej pracy magisterskiej jest kompleksowa analiza narzędzi stosowanych do przeciwdziałania dezinformacji w obszarze multimediów ze szczególnym uwzględnieniem detekcji treści generowanych przez sztuczną inteligencję.
+Praca obejmuje zarówno przegląd literatury naukowej i raportów branżowych, jak i praktyczną implementację oraz ewaluację wybranych metod detekcji na zbiorach testowych zawierających materiały wideo wygenerowane przez modele AI.
+
+W ramach pracy zrealizowano następujące cele szczegółowe:
+\begin{enumerate}
+    \item Analiza zagrożeń związanych z manipulacją treściami multimedialnymi -- taksonomia technik, skala zjawiska oraz konsekwencje społeczne.
+    \item Przegląd i kategoryzacja dostępnych narzędzi detekcji fałszywych treści -- rozwiązania komercyjne, open-source oraz metody akademickie.
+    \item Implementacja i ewaluacja systemu detekcji wideo generowanego przez AI, opartego na analizie artefaktów wizualnych, przepływu optycznego oraz widma częstotliwościowego.
+    \item Ocena skuteczności systemu przy użyciu standardowych metryk klasyfikacji binarnej: recall, FPR oraz AUC.
+\end{enumerate}
+
+\section*{Struktura pracy}
+
+Praca składa się z sześciu rozdziałów.
+Rozdział~1 stanowi wprowadzenie do problematyki dezinformacji multimedialnej i zarysowuje cel oraz zakres pracy.
+Rozdział~2 zawiera przegląd literatury naukowej dotyczącej technik generowania i detekcji fałszywych treści multimedialnych.
+Rozdział~3 opisuje taksonomię zagrożeń -- techniki manipulacji obrazem, dźwiękiem i wideo, ze szczególnym uwzględnieniem metod opartych na generatywnej AI.
+Rozdział~4 prezentuje przegląd narzędzi i metod detekcji, zarówno komercyjnych, jak i akademickich.
+Rozdział~5 opisuje implementację i ewaluację opracowanego systemu detekcji wraz z analizą uzyskanych wyników.
+Rozdział~6 zawiera wnioski końcowe oraz kierunki dalszych badań.

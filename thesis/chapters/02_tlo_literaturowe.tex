@@ -1,0 +1,244 @@
+\chapter{T\l{}o literaturowe}
+\label{ch:tlo}
+
+Niniejszy rozdzia\l{} przedstawia systematyczny przegl\k{a}d literatury naukowej
+dotycz\k{a}cej generowania i~detekcji fa\l{}szywych tre\'{s}ci multimedialnych.
+Om\'{o}wiono kolejno: modele generatywne le\k{z}\k{a}ce u~podstaw syntezy wideo,
+metody detekcji oparte na~analizie obrazu i~ruchu, techniki znakowania wodnego
+tworz\k{a}ce alternatywn\k{a} \'{s}cie\k{z}k\k{e} weryfikacji, zbiory danych
+benchmarkowych oraz otwarte problemy badawcze.
+
+% -------------------------------------------------------------------
+\section{Generatywne modele AI w~syntezie wideo}
+\label{sec:modele_generatywne}
+
+P\l{}ynne generowanie wideo przez sztuczn\k{a} inteligencj\k{e} sta\l{}o si\k{e}
+praktyczn\k{a} rzeczywisto\'{s}ci\k{a} dzi\k{e}ki ewolucji trzech g\l{}\'{o}wnych
+architektur: \textit{Generative Adversarial Networks} (GAN), modeli dyfuzyjnych
+oraz modeli j\k{e}zykowych wielomodalnych.
+
+\subsection{Modele GAN}
+
+Architektura GAN zaproponowana przez Goodfellow\'{a} et al.\ w~2014~r.
+\cite{Goodfellow2014GAN}
+opiera si\k{e} na~grze minimax pomi\k{e}dzy generatorem a~dyskryminatorem.
+W~kontekk\'{s}cie wideo generatywne modele GAN osi\k{a}gn\k{e}\l{}y prze\l{}om
+z~architektur\k{a} \textit{VideoGAN} \cite{Vondrick2016VideoGAN}
+oraz jej rozszerzeniami umo\.{z}liwiaj\k{a}cymi syntez\k{e} d\l{}u\.{z}szych sekwencji
+temporal nie koherentnych.
+Modele GAN by\l{}y r\'{o}wnie\.{z} pierwsz\k{a} klas\k{a} modeli powszechnie stosowan\k{a}
+do~tworzenia \textit{deepfake}\'{o}w twarzy -- system FaceSwap i~jego pochodne
+opiera\l{}y si\k{e} na~enkoderze-dekoderze trenowanym adversaryjnie
+\cite{Khan2025ComprehensiveSurvey}.
+
+\subsection{Modele dyfuzyjne i~latentne}
+
+Przej\'{s}cie od~GAN do~modeli dyfuzyjnych nast\k{a}pi\l{}o po~2022~r.
+Modele takie jak DALL-E 2, Stable Diffusion i~Imagen demonstrowa\l{}y
+wy\.{z}sz\k{a} rozmaito\'{s}\'{c} generowania i~lepsz\k{a} stabilno\'{s}\'{c} treningu
+\cite{Ho2020DDPM}.
+Dla wideo kluczowe by\l{}y modele Video Diffusion Models (Ho et al.,~2022),
+Make-A-Video (Singer et al.,~2022) i~Sora (OpenAI, 2024), kt\'{o}ry
+wprowadzi\l{} architektur\k{e} Diffusion Transformer (DiT) przetwarzaj\k{a}c\k{a}
+wideo jako p\l{}atki przestrzenne i~temporalne
+\cite{Videoworldsimulators2024}.
+Rozdzia\l{}~\ref{ch:zagrozenia} om\'{o}wi szczeg\'{o}\l{}owo konsekwencje
+tych modeli dla dezinformacji.
+
+\subsection{Runway, Kling AI i~Pika Labs}
+
+Komercyjne modele Runway Gen-3/Gen-4/Gen-4.5, Luma Dream Machine, Kling~AI
+i~Pika~Labs reprezentuj\k{a} now\k{a} generacj\k{e} system\'{o}w text-to-video
+dost\k{e}pnych dla szerokich grup u\.{z}ytkownik\'{o}w przez interfejsy webowe
+\cite{Runway2024Gen3}.
+Badania pokaza\l{}y, \.{z}e dost\k{e}pno\'{s}\'{c} tych narz\k{e}dzi obni\.{z}a pr\'{o}g
+wej\'{s}cia do produkcji dezinformacji multimedialnej do~zera technicznego
+\cite{Li2025AIGCSurvey}.
+
+% -------------------------------------------------------------------
+\section{Detekcja deepfake -- przegl\k{a}d metod}
+\label{sec:detekcja_przeglad}
+
+Metody detekcji deepfake mo\.{z}na podzieli\'{c} na~trzy g\l{}\'{o}wne klasy:
+(1)~metody oparte na~analizie pojedynczych klatek (spatial),
+(2)~metody temporalne uwzgl\k{e}dniaj\k{a}ce sp\'{o}jno\'{s}\'{c} ruchu w~czasie,
+oraz (3)~metody hybrydowe, \l{}\k{a}cz\k{a}ce oba podej\'{s}cia
+\cite{Wang2024ReliabilityPerspective}.
+
+\subsection{Metody przestrzenne (spatial)}
+
+Wczesne detektory deepfake koncentrowa\l{}y si\k{e} na~wykrywaniu
+artefakt\'{o}w w~pojedynczych klatkach: anomaliach wok\'{o}\l{}
+kraw\k{e}dzi twarzy po~blendingu, niesp\'{o}jno\'{s}ciach kolorystycznych
+w~obszarze oczu i~ust, brakach odblask\'{o}w i~sztucznej g\l{}adko\'{s}ci
+skory \cite{Matern2019ExploitingVisualArtifacts}.
+Nowoczesne podej\'{s}cia u\.{z}ywaj\k{a} Convolutional Neural Networks (CNN)
+lub Vision Transformer\'{o}w (ViT) trenowanych na~du\.{z}ych zbiorach
+danych deepfake \cite{Dong2023CLIPDeepfake}.
+Li et al.\ wykazali, \.{z}e specjalizowane detektory CNN osi\k{a}gaj\k{a} AUC
+powy\.{z}ej 0,95 na~zbiorze FaceForensics++ w~warunkach controlled,
+natomiast spad\l{}y do~0,65--0,72 na~materia\l{}ach z~Internetu
+po~wielokrotnej kompresji \cite{Li2025AIGCSurvey}.
+
+\subsection{Analiza przepływu optycznego}
+
+Przep\l{}yw optyczny (\textit{optical flow}) jest kluczow\k{a} cech\k{a}
+temporal\k{a} wykorzystywan\k{a} w~detekcji wideo AI.
+Amerini et al.\ \cite{Amerini2019ICCV} zaproponowali
+arch\'{i}tektur\k{e} CNN przyjmuj\k{a}c\k{a} na~wej\'{s}ciu mapy przep\l{}ywu
+optycznego zamiast klatek wideo, uzyskuj\k{a}c znacz\k{a}c\k{a} popraw\k{e}
+wykrywalno\'{s}ci dla film\'{o}w deepfake z~podmian\k{a} twarzy.
+Caldelli et al.\ \cite{Caldelli2021OpticalFlowCNN} rozszerzyli
+te wyniki pokazuj\k{a}c, \.{z}e modele oparte na~przep\l{}ywie lepiej
+generalizuj\k{a} na~nieznane typy manipulacji, poniewa\.{z} koduj\k{a}
+temporaln\k{a} niesp\'{o}jno\'{s}\'{c} globaln\k{a}, niezale\.{z}n\k{a} od~konkretnej
+techniki generowania.
+Nassif et al.\ \cite{Nassif2022ImprovedOpticalFlow}
+zaproponowali ulepszony estymator przep\l{}ywu odporny na~kompresj\k{e} wideo,
+co jest istotne dla materia\l{}\'{o}w pobieranych z~platform spo\l{}eczno\'{s}ciowych.
+
+\subsection{Analiza widma częstotliwościowego (FFT)}
+
+Transformata Fouriera (FFT) umo\.{z}liwia analiz\k{e} rozk\l{}adu
+cz\k{e}stotliwo\'{s}ci w~klatkach wideo. Badania wykazywa\l{}y,
+\.{z}e obrazy generowane przez sieci neuronowe wykazuj\k{a} charakterystyczne
+artifakty w~dziedzinie cz\k{e}stotliwo\'{s}ci -- nieregularne piki
+wynikaj\k{a}ce z~artefakt\'{o}w up-samplingu (\textit{checkerboard pattern})
+i~specyficznych filtr\'{o}w splotowych \cite{Frank2020FrequencyDNN}.
+Artifakty te s\k{a} cz\k{e}sto niewidoczne go\l{}ym okiem, ale statystycznie
+odst\k{a}puj\k{a} od~rozk\l{}adu widmowego naturalnych nagra\'{n} kamerowych.
+\textit{Szum sensora} kamery~-- zwany te\.{z} sygna\l{}em PRNU (\textit{Photo-Response
+Non-Uniformity}) -- wyst\k{e}puje w~autentycznych nagraniach jako por\k{a}wnywalny
+charakterystyczny wzorzec, kt\'{o}ry jest nieobecny lub zmodyfikowany w~tre\'{s}ciach
+generowanych AI \cite{Wang2024ReliabilityPerspective}.
+
+\subsection{Metody hybrydowe i~transformer\'{o}w wizyjnych}
+
+Nowsze prace proponuj\k{a} po\l{}\k{a}czenie cech przestrzennych i~temporalnych
+w~jednym modelu. Badania z~zastosowaniem Vision Transformer\'{o}w (ViT)
+pokaza\l{}y, \.{z}e mechanizm uwagi (\textit{attention}) jest zdolny
+do~identyfikacji lokalnych niesp\'{o}jno\'{s}ci w~deepfake\'ach nawet przy
+du\.{z}ej jako\'{s}ci generowania \cite{Dong2023CLIPDeepfake}.
+Oddzielnie, modele \textit{CLIP-based} pozwalaj\k{a} wykory\'{s}tywa\'{c}
+reprezentacje wizualno-j\k{e}zykowe do~zero-shot detekcji nowych modeli
+generatywnych, na~kt\'{o}rych klasyczne detektory nie by\l{}y trenowane
+\cite{Li2025AIGCSurvey}.
+
+% -------------------------------------------------------------------
+\section{Znakowanie wodne tre\'{s}ci generowanych przez AI}
+\label{sec:watermarking}
+
+Alternatywn\k{a} \'{s}cie\k{z}k\k{a} weryfikacji autentyczno\'{s}ci
+jest proaktywne znakowanie wodne tre\'{s}ci przez ich tw\'{o}rc\'{o}w
+(modele AI). W~odr\'{o}\.{z}nieniu od~detekcji post-hoc, kt\'{o}ra analizuje
+tre\'{s}\'{c} po~opublikowaniu, znakowanie wodne opiera si\k{e} na~osadzeniu
+niewidocznego lub widocznego identyfikatora w~momencie generowania.
+
+\subsection{Niewidoczne znakowanie wodne}
+
+Modele takie jak HiDDeN \cite{Zhu2018HiDDeN}
+i~jego nast\k{e}pcy ucz\k{a} si\k{e} osadza\'{c} bity informacji w~piksalch obrazu
+w~spos\'{o}b niezauwa\.{z}alny dla cz\l{}owieka, ale wykrywalny przez koder.
+Luo et al.\ \cite{Luo2025WatermarkingAIGC} dokonali przegl\k{a}du metod
+znakowania wodnego dla tre\'{s}ci AIGC, wykazuj\k{a}c,
+\.{z}e aktualne metody s\k{a} podatne na~ataki transformacji (zmiana rozdzielczo\'{s}ci,
+kompresja JPEG, konwersja formatu wideo).
+Najaf-Abadi et al.\ \cite{NajafAbadi2024RobustWatermark} zaproponowali
+robustny schemat oparty na~g\l{}\k{e}bokich sieciach neuronowych odporny na~wi\k{e}kszo\'{s}\'{c}
+klasycznych atak\'{o}w geometrycznych.
+
+\subsection{Podatno\'{s}ci na~usuwanie}
+
+Zhao et al.\ \cite{Zhao2023InvisibleRemovable} wykazali,
+\.{z}e niewidoczne znaki wodne mog\k{a} by\'{c} usuni\k{e}te
+przy~u\.{z}yciu modeli generatywnych bez znacz\k{a}cej degradacji jako\'{s}ci obrazu.
+To fundamentalne ograniczenie sprawia, \.{z}e samo znakowanie wodne
+nie mo\.{z}e by\'{c} jedyn\k{a} warstw\k{a} weryfikacji.
+Fernandez et al.\ \cite{Fernandez2024BlindWatermark} zaproponowali
+znakowanie wodne odporne na~ataki geometryczne (obr\'{o}t, przycinanie),
+ale podatne na~adversaryjne usuwanie.
+
+\subsection{Standardy i~inicjatywy bran\.{z}owe}
+
+Piet et al.\ \cite{Piet2024SoKWatermarking} dokonali systematyzacji
+(SoK) metod znakowania wodnego dla tre\'{s}ci AIGC, wyodr\k{e}bniaj\k{a}c
+wymagania: skalowalno\'{s}\'{c}, odporno\'{s}\'{c} na~usuwanie i~falsyfikacj\k{e},
+nisk\k{a} utrat\k{a} jako\'{s}ci tre\'{s}ci. \'{Z}aden z~aktualnych system\'{o}w
+nie spe\l{}nia jednocze\'{s}nie wszystkich tych wymaga\'{n}.
+Inducja Content Credentials (C2PA) \cite{C2PA2024Spec} podejmuje
+podej\'{s}cie metadanowe: ka\.{z}dy plik mo\.{z}e nosi\'{c} cyfrowo podpisany
+lancuch proweniencji informuj\k{a}cy o~historii edycji.
+
+% -------------------------------------------------------------------
+\section{Zbiory danych i~benchmarki}
+\label{sec:zbiory_danych_lit}
+
+Jako\'{s}\'{c} oceny metod detekcji zale\.{z}y bezpo\'{s}rednio od~stosowanych
+zbior\'{o}w danych. Kluczowe benchmarki obejmuj\k{a}:
+
+\begin{itemize}
+  \item \textbf{FaceForensics++} \cite{Rossler2019FaceForensics} ---
+        100~film\'{o}w z~Internetu, zmanipulowanych czterema
+        metodami (Deepfakes, FaceSwap, Face2Face, NeuralTextures)
+        z~trzema poziomami kompresji. Najcz\k{e}\'{s}ciej cytowany benchmark
+        dla face-swap deepfake.
+  \item \textbf{DFDC (DeepFake Detection Challenge)} \cite{Dolhansky2020DFDC} ---
+        zbi\'{o}r Meta/Facebook zawieraj\k{a}cy 100~000+ film\'{o}w
+        generowanych przez 8 metod. Opublikowany w~2020~r.~w~ramach
+        Kaggle competition z~nagrod\k{a} 1~mln USD.
+  \item \textbf{DGM\textsuperscript{4}} \cite{Shao2023DGM4} ---
+        nowszy zbi\'{o}r obejmuj\k{a}cy multimodalne fa\l{}szerstwa
+        (text + obraz), odpowiadaj\k{a}cy realiom dezinformacji AIGC.
+  \item \textbf{GenVideo} \cite{Sun2024GenVideo} ---
+        zbi\'{o}r ponad 250~000 klip\'{o}w z~18 modeli text-to-video
+        (Sora, Runway, Kling, Pika, Stable Video Diffusion);
+        dedykowany ewaluacji detektor\'{o}w dla nowej generacji
+        modeli generatywnych.
+\end{itemize}
+
+G\l{}\'{o}wnym problemem benchmarkowym jest \textbf{transfer gap}: modele
+trenowane na~FaceForensics++ lub DFDC generalizuj\k{a} s\l{}abo na~nowe,
+niewidziane modele generatywne \cite{Peng2024GenerationDetection}.
+Badania konsekwentnie potwierdzaj\k{a},
+\.{z}e AUC detektora spada o~10--30 punkt\'{o}w procentowych
+przy testowaniu na~nowym generatorze \cite{Wang2024ReliabilityPerspective}.
+
+% -------------------------------------------------------------------
+\section{Otwarte problemy i~kierunki badań}
+\label{sec:otwarte_problemy}
+
+Literatura identyfikuje kilka kluczowych otwartych problem\'{o}w:
+
+\paragraph{Generalizacja mi\k{e}dzy-modelowa.}
+G\l{}\'{o}wnym wyzwaniem jest budowa detektor\'{o}w, kt\'{o}re dzia\l{}aj\k{a}
+skutecznie na~modeli nieb\k{e}d\k{a}cych cz\k{e}\'{s}ci\k{a} zbioru treningowego.
+Sun et al.\ \cite{Sun2024GenVideo} wykazali, \.{z}e detektory
+trenowane na~starszych modelach GAN osi\k{a}gaj\k{a} tylko
+$\sim$60\% AUC na~filmach z~Kling AI czy Runway Gen-4.
+
+\paragraph{Odporno\'{s}\'{c} na~kompresj\k{e} i~postprocessing.}
+Wi\k{e}kszo\'{s}\'{c} materia\l{}\'{o}w w~Internecie przechodzi wielokrotn\k{a}
+reenkodacj\k{e} (YouTube, TikTok, Messenger). Badania
+\cite{Caldelli2021OpticalFlowCNN, Nassif2022ImprovedOpticalFlow}
+pokaza\l{}y, \.{z}e artefakty spektralne i~przep\l{}yw optyczny s\k{a}
+wra\.{z}liwe na~kompresj\k{e} H.264/H.265 o~wysokim wsp\'{o}\l{}czynniku.
+
+\paragraph{Fa\l{}szywe alarmy na~tre\'{s}ciach broadcastowych.}
+Animowane grafiki newsowe (\textit{lower thirds}), elementy
+Augmented Reality i~renderowane reklamy 3D systematycznie generuj\k{a}
+fa\l{}szywe alarmy we~wszystkich znanych klasach detektor\'{o}w.
+Jest to empirycznie potwierdzone w~niniejszej pracy (sekcja~\ref{sec:aivideodetector})
+oraz w~literaturze \cite{Wang2024ReliabilityPerspective}.
+
+\paragraph{Interpretowalno\'{s}\'{c} decyzji.}
+Wi\k{e}kszo\'{s}\'{c} komercyjnych narz\k{e}dzi zwraca jedynie wynik liczbowy
+bez wyja\'{s}nienia, kt\'{o}re sygna\l{}y zadecydowa\l{}y o~klasyfikacji.
+Badania z~zakresu XAI (\textit{eXplainable AI}) stosowane do~deepfake
+nale\k{z}\k{a} do~mniejszo\'{s}ci w~literaturze \cite{Khan2025ComprehensiveSurvey}.
+
+\paragraph{Wy\'{s}cig zbroje\'{n}.}
+Ka\.{z}da nowa generacja modeli generatywnych wymaga przetrenowania
+detektor\'{o}w. Badania \cite{Li2025AIGCSurvey} sugeruj\k{a},
+\.{z}e podej\'{s}cia oparte na~cechach fundamentalnych (FFT, optical flow,
+metadane) s\k{a} bardziej trwa\l{}e ni\.{z} podej\'{s}cia CNN trenowane
+end-to-end na~konkretnych modelach.
