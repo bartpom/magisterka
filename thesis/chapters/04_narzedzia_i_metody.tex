@@ -108,6 +108,16 @@ Zbi\'{o}r liczy \textbf{48 film\'{o}w} obejmuj\k{a}cych nast\k{e}puj\k{a}ce kate
         mieszana zawarto\'{s}\'{c}; traktowane jako corner case).
 \end{itemize}
 
+\paragraph{Uwaga dotycz\k{a}ca materia\l{}\'ow kontrolnych.}
+Pi\k{e}\'{c} film\'{o}w z~kategorii ,,kontrolne'' (\texttt{y2dynet9Gvg},
+\texttt{LHHI-Q36wIM}, \texttt{mlXiYvBE4kw}, \texttt{OpWCyAXoPvs},
+\texttt{KUHx-2uz\_qI}) po r\k{e}cznej weryfikacji okaza\l{}o si\k{e} nagraniami
+,,screen capture'' interfejs\'{o}w u\.{z}ytkownika lub recenzjami --
+nie s\k{a} filmami wygenerowanymi przez AI w~\'{s}cis\l{}ym sensie.
+Zosta\l{}y one zakwalifikowane jako \textbf{corner cases}
+i~wy\l{}\k{a}czone z~g\l{}\'{o}wnej ewaluacji metryk klasyfikacji,
+cho\'{c} pozostaj\k{a} w~zbiorze jako przyk\l{}ady trudnych przypadk\'{o}w.
+
 R\'{o}\.{z}norodno\'{s}\'{c} model\'{o}w generatywnych (9 r\'{o}\.{z}nych modeli) oraz
 zr\'{o}\.{z}nicowanie styl\'{o}w wizualnych~--- od realistycznych scen ulicznych po
 abstrakcyjne animacje~--- pozwala na~rzeteln\k{a} ocen\k{e} skuteczno\'{s}ci
@@ -119,9 +129,10 @@ narz\k{e}dzi detekcji.
 
 Na rynku dost\k{e}pnych jest kilka publicznie dost\k{e}pnych serwis\'{o}w internetowych
 omawi\k{a}cych detekcj\k{e} tre\'{s}ci generowanych przez AI.
-W~niniejszej sekcji om\'{o}wiono dwa serwisy testowane w~ramach niniejszej pracy:
-DetectVideo.ai (sekcja~\ref{sec:detectvideo}) oraz Undetectable.ai
-(sekcja~\ref{sec:undetectable}).
+W~niniejszej sekcji om\'{o}wiono trzy serwisy testowane w~ramach niniejszej pracy:
+DetectVideo.ai (sekcja~\ref{sec:detectvideo}),
+Undetectable.ai (sekcja~\ref{sec:undetectable})
+oraz AIVideoDetector.com (sekcja~\ref{sec:aivideodetector}).
 
 % -------------------------------------------------------------------
 \subsection{DetectVideo.ai}
@@ -335,7 +346,7 @@ Zidentyfikowano kilka \textbf{przypadk\'{o}w wymagaj\k{a}cych r\k{e}cznej weryfi
 (patrz sekcja~\ref{sec:weryfikacja_reczna}).
 
 % -------------------------------------------------------------------
-\subsubsection{Przypadki do r\k{e}cznej weryfikacji}
+\subsubsection{Przypadki wymagaj\k{a}ce r\k{e}cznej weryfikacji}
 \label{sec:weryfikacja_reczna}
 
 Nast\k{e}puj\k{a}ce filmy uzyska\l{}y wyniki niesp\'{o}jne z~oczekiwaniami lub
@@ -343,27 +354,108 @@ wymagaj\k{a} dodatkowej analizy:
 
 \begin{itemize}
   \item \textbf{Gen-4\_Turbo\_Busy\_city\_street\_night} (score 31) --- pomimo
-        syntetycznego pochodzenia (Runway Gen-4 Turbo) wynik wskazuje na~,,Mostly
-        authentic''. Image score wynosi jedynie 32\%, co mo\.{z}e sugerowa\'{c}, \.{z}e
-        fotorealistyczny styl nocnej sceny z~deszczem skutecznie na\'{s}laduje
-        tekstur\k{e} kamery.
-  \item \textbf{iVtqtu6HceI\_Echoes\_of\_Grace\_Sora} (score 35) --- wynik
-        motion wynosi a\.{z} 77\%, jednak image score tylko 14\%. Plik mo\.{z}e
-        zawiera\'{c} hybrydow\k{a} zawarto\'{s}\'{c} (prawdziwe t\l{}o + efekty AI).
+        syntetycznego pochodzenia wynik wskazuje na~,,Mostly authentic''.
+        Image score wynosi jedynie 32\%, co sugeruje, \.{z}e fotorealistyczny styl
+        nocnej sceny z~deszczem skutecznie na\'{s}laduje tekstur\k{e} kamery.
+  \item \textbf{iVtqtu6HceI\_Echoes\_of\_Grace\_Sora} (score 35) ---
+        motion score 77\%, ale image score tylko 14\%. Mo\.{z}liwa hybrydowa
+        zawarto\'{s}\'{c} (prawdziwe t\l{}o + efekty AI).
   \item \textbf{kling\_waves\_4237} (score 25, image 1\%) oraz
         \textbf{kling\_waterfall\_3689} (score 30, image 5\%) --- sceny wodne
         generowane przez Kling AI uzyska\l{}y bardzo niski image score. Naturalny
-        wygl\k{a}d wody mo\.{z}e by\'{c} trudny do~odr\'{o}\.{z}nienia od~prawdziwego
-        nagrania na~poziomie statystycznym pikseli.
-  \item \textbf{KUHx-2uz\_qI\_Runway\_Aleph} (score 5) --- materia\l{} promocyjny
-        Runway, zawieraj\k{a}cy g\l{}\'{o}wnie interfejs aplikacji, co t\l{}umaczy
-        niski wynik.
+        wygl\k{a}d wody jest trudny do~odro\.{z}nienia statystycznie od~prawdziwego
+        nagrania.
   \item \textbf{Human\_face\_morphing} (score 71, motion 12\%) oraz
         \textbf{Gen-4\_Turbo\_Portrait\_woman} (score 74, motion 23\%) ---
         wysokie Image score (100\%) przy niskim Motion sugeruje, \.{z}e
-        narz\k{e}dzie wykrywa artifakty generatywne w~klatce, ale ruch jest
-        zbyt p\l{}ynny/statyczny by uruchomi\'{c} detekcj\k{e} optyczn\k{a}.
+        narz\k{e}dzie wykrywa artifakty generatywne w~klatce, ale statyczny
+        charakter sceny nie uruchamia detekcji optycznej.
 \end{itemize}
+
+% -------------------------------------------------------------------
+\subsection{AIVideoDetector.com}
+\label{sec:aivideodetector}
+
+AIVideoDetector.com to kolejny publicznie dost\k{e}pny serwis detekcji
+film\'{o}w AI. Narz\k{e}dzie zosta\l{}o przetestowane na~zbiorze
+\texttt{adv\_fp\_trap} licz\k{a}cym \textbf{41 autentycznych film\'{o}w}
+(nagrania kamerowe, materia\l{}y broadcastowe) w~celu wyznaczenia
+wska\'{z}nika fa\l{}szywych alarm\'{o}w (\textit{False Positive Rate, FPR}).
+
+\subsubsection{Wska\'{z}nik fa\l{}szywych alarm\'{o}w}
+
+Serwis b\l{}\k{e}dnie zakwalifikowa\l{} \textbf{7 z~41 autentycznych film\'{o}w}
+jako wygenerowane przez AI, co daje:
+\[
+\mathrm{FPR} = \frac{7}{41} \approx 17{,}1\%
+\]
+
+Tabela~\ref{tab:aivideodetector_fp} przedstawia wszystkie 7 fa\l{}szywych alarm\'{o}w
+wraz z~uzyskanymi scorami i~zidentyfikowanym powodem b\l{}\k{e}du.
+
+\begin{table}[H]
+\centering
+\caption{Fa\l{}szywe alarmy AIVideoDetector.com na zbiorze autentycznych film\'{o}w}
+\label{tab:aivideodetector_fp}
+\small
+\begin{tabular}{|c|l|l|}
+\hline
+\textbf{Score} & \textbf{Film} & \textbf{Pow\'{o}d b\l{}\k{e}du} \\
+\hline
+91 & Broadcast News Lower Thirds V1 & Animowana grafika newsowa \\
+87 & BBC News Blooper Double lower third & Nak\l{}adka lower third \\
+86 & Broadcast News Green Screen Lower Third & Green screen overlay \\
+79 & Samsung 3D Billboard Gangnam & Renderowana reklama 3D \\
+69 & Broadcast News Channel Lower third & Animowana grafika newsowa \\
+67 & LaLiga AR Broadcast & Augmented Reality overlay \\
+50 & Broadcast Design Lower Third & Animowana grafika \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Analiza wzorca b\l{}\k{e}d\'{o}w}
+
+Wszystkie 7 fa\l{}szywych alarm\'{o}w \l{}\k{a}czy wsp\'{o}lna cecha: s\k{a} to
+materia\l{}y z~\textbf{animowanymi elementami graficznymi naklejonymi na~obraz
+kamery} -- lower thirds, overlaye AR/VR, renderowane elementy 3D.
+Wzorzec ten jest identyczny z~b\l{}\k{e}dami w\l{}asnego detektora.
+Sugeruje to, \.{z}e sk\l{}onno\'{s}\'{c} do~fa\l{}szywych alarm\'{o}w
+na~tego rodzaju materia\l{}ach stanowi \textbf{systemowe ograniczenie
+calej klasy detektor\'{o}w} opartych na~analizie obrazu -- nie jest
+to wada konkretnego rozwi\k{a}zania.
+
+\subsubsection{Por\'{o}wnanie og\'{o}lnych metryk (N\,=\,79)}
+
+Tabela~\ref{tab:metryki_ogolne} przedstawia por\'{o}wnanie g\l{}\'{o}wnych
+metryk klasyfikacji dla w\l{}asnego detektora i~serwisu AIVideoDetector.com
+na~wsp\'{o}lnym zbiorze 79 film\'{o}w.
+
+\begin{table}[H]
+\centering
+\caption{Por\'{o}wnanie metryk klasyfikacji -- N\,=\,79}
+\label{tab:metryki_ogolne}
+\small
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Metryka} & \textbf{Nasz system} & \textbf{AIVideoDetector.com} & \textbf{Lepszy} \\
+\hline
+Accuracy & 78{,}9\% & 79{,}7\% & AIVid \\
+Precision & \textbf{82{,}9\%} & 80{,}6\% & Nasz \\
+Recall & 74{,}4\% & 76{,}3\% & AIVid \\
+F1 & \textbf{78{,}4\%} & \textbf{78{,}4\%} & remis \\
+FPR & \textbf{16{,}2\%} & 17{,}1\% & Nasz \\
+\hline
+\end{tabular}
+\end{table}
+
+Wyniki obu system\'{o}w s\k{a} praktycznie identyczne~---
+F1 wynosi dok\l{}adnie 78{,}4\% dla obu narz\k{e}dzi.
+Proponowany detektor przewy\.{z}sza AIVideoDetector.com pod wzgl\k{e}dem
+Precision (82{,}9\% vs 80{,}6\%) oraz FPR (16{,}2\% vs 17{,}1\%),
+natomiast AIVideoDetector.com ma nieznacznie wy\.{z}sz\k{a} dok\l{}adno\'{s}\'{c}
+og\'{o}ln\k{a} i~Recall. Wynik ten potwierdza, \.{z}e proponowane rozwi\k{a}zanie
+jest konkurencyjne wobec komercyjnych serwis\'{o}w przy zachowaniu
+pe\l{}nej kontroli nad przetwarzaniem danych.
 
 % -------------------------------------------------------------------
 \section{Por\'{o}wnanie narz\k{e}dzi}
@@ -372,33 +464,38 @@ wymagaj\k{a} dodatkowej analizy:
 \subsection{Zalety i~wady analizowanych narz\k{e}dzi internetowych}
 \label{sec:zalety_wady_internet}
 
-Tabela~\ref{tab:porownanie_narzedzi} zestawia oba narz\k{e}dzia.
+Tabela~\ref{tab:porownanie_narzedzi} zestawia wszystkie trzy narz\k{e}dzia.
 
 \begin{table}[H]
 \centering
 \caption{Por\'{o}wnanie komercyjnych narz\k{e}dzi detekcji wideo}
 \label{tab:porownanie_narzedzi}
 \small
-\begin{tabular}{|p{3cm}|p{6cm}|p{6cm}|}
+\begin{tabular}{|p{2.8cm}|p{5.8cm}|p{5.8cm}|}
 \hline
 \textbf{Narz\k{e}dzie} & \textbf{Zalety} & \textbf{Wady} \\
 \hline
 DetectVideo.ai &
-Prosty w~u\.{z}yciu, brak rejestracji, obs\l{}uguje popularne formaty;
-skutecznie analizuje metadane (wykrycie manipulacji dokumentu) &
-83\% wynik\'{o}w to nierozstrzygni\k{e}te 55\%; nie r\'{o}\.{z}nicuje nowych modeli
-(Sora, Gen-4.5); brak przezroczystości decyzji (brak XAI);
-wynik nie ma warto\'{s}ci diagnostycznej \\
+Prosty w~u\.{z}yciu, brak rejestracji;
+skutecznie analizuje metadane &
+83\% wynik\'{o}w to nierozstrzygni\k{e}te 55\%;
+nie r\'{o}\.{z}nicuje nowych modeli (Sora, Gen-4.5);
+brak XAI; wynik bez warto\'{s}ci diagnostycznej \\
 \hline
 Undetectable.ai &
-Analiza wielokana\l{}owa (Image + Motion); precyzyjne wyniki liczbowe
-0--100; skuteczna detekcja klasycznych modeli Gen-3;
-dodatkowe informacje diagnostyczne (breakdown kana\l{}\'{o}w) &
-Problemy z~nowymi, fotorealistycznymi modelami
-(Gen-4 Turbo ,,busy city'' = 31\%);
-limit dzienny w~wersji bezp\l{}atnej;
-b\l{}\k{e}dy API (\texttt{video: 400}) przy niekt\'{o}rych plikach;
-od rzucanie plik\'{o}w przez system moderacji \\
+Analiza wielokana\l{}owa (Image + Motion);
+precyzyjne wyniki 0--100;
+skuteczny dla starszych modeli Gen-3 &
+Problemy z~nowymi fotorealistycznymi modelami;
+limit dzienny w~bezp\l{}atnej wersji;
+b\l{}\k{e}dy API; odrzucanie plik\'{o}w przez moderacj\k{e} \\
+\hline
+AIVideoDetector.com &
+F1 = 78{,}4\% na zbiorze N\,=\,79;
+przejrzysty wynik liczbowy &
+FPR 17{,}1\% --- fa\l{}szywe alarmy na~lower thirds
+i~elementach AR/3D; ten sam systemowy blind spot
+co pozosta\l{}e narz\k{e}dzia tej klasy \\
 \hline
 \end{tabular}
 \end{table}
@@ -419,22 +516,29 @@ oraz metadanych. Poni\.{z}ej zestawiono jego g\l{}\'{o}wne w\l{}a\'{s}ciwo\'{s}c
         przep\l{}ywu optycznego i~metadanych zwi\k{e}ksza odporno\'{s}\'{c}
         na~manipulacje pojedynczym kana\l{}em.
   \item \textbf{Interpretowalny wynik (XAI)} --- ka\.{z}da decyzja zawiera
-        wagi sk\l{}adowych sygna\l{}\'{o}w, co umo\.{z}liwia analiz\k{e} przyczynow\k{a}.
+        wagi sk\l{}adowych sygna\l{}\'{o}w, umo\.{z}liwiaj\k{a}c analiz\k{e} przyczynow\k{a}.
   \item \textbf{Praca lokalna} --- mo\.{z}liwo\'{s}\'{c} uruchomienia bez
-        przesy\l{}ania danych do chmury.
+        przesy\l{}ania danych do chmury, co chroni prywatno\'{s}\'{c} danych.
+  \item \textbf{Konkurencyjna skuteczno\'{s}\'{c}} --- F1 = 78{,}4\%,
+        Precision 82{,}9\% i~FPR 16{,}2\% przy r\'{o}wnoleg\l{}ym wyniku
+        AIVideoDetector.com.
   \item \textbf{Skalowalny na~nowe modele} --- po przetrenowaniu na~nowych
         danych mo\.{z}na dostosowa\'{c} do kolejnych generacji modeli AI.
 \end{itemize}
 
 \paragraph{Wady i~ograniczenia}
 \begin{itemize}
-  \item \textbf{Czuło\'{s}\'{c} na kompresj\k{e}} --- silna kompresja H.264/H.265
+  \item \textbf{Czu\l{}o\'{s}\'{c} na kompresj\k{e}} --- silna kompresja H.264/H.265
         mo\.{z}e wyt\l{}umi\'{c} sygna\l{}y spektralne.
   \item \textbf{Kr\'{o}tkie klipy} --- pliki poni\.{z}ej 5~sekund dostarczaj\k{a}
         niewystarczaj\k{a}cej liczby klatek do rzetelnej analizy.
   \item \textbf{Zasoby obliczeniowe} --- analiza wielokana\l{}owa jest
         bardziej wymagaj\k{a}ca ni\.{z} proste narz\k{e}dzia metadanowe.
+  \item \textbf{Systemowy blind spot: lower thirds i~AR} --- tak jak
+        ca\l{}a klasa detektor\'{o}w, proponowany system generuje fa\l{}szywe alarmy
+        dla materia\l{}\'{o}w z~animowanymi naklejkami broadcastowymi
+        lub renderowanymi elementami 3D (FPR 16{,}2\%).
   \item \textbf{Ograniczenia generalizacji} --- narz\k{e}dzie mo\.{z}e gorzej
         dzia\l{}a\'{c} na~modelach nieobj\k{e}tych zbiorem treningowym
-        (np.\ sceny wodne Kling AI).
+        (np.\ realistyczne sceny wodne Kling AI).
 \end{itemize}
