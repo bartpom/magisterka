@@ -297,28 +297,53 @@ class GripSplitter(QSplitter):
 class ClampedHeader(QHeaderView):
     """
     QHeaderView z twardym ograniczeniem min/max szerokości per kolumna.
-    Nadpisuje mouseMoveEvent i mouseReleaseEvent żeby wymusić limity
-    natychmiast — bez walki z sectionResized (który działa za późno).
+
+    Mechanizm:
+    - sectionResized (sygnał Qt) → _on_section_resized → natychmiastowy clamp
+    - mouseMoveEvent / mouseReleaseEvent → dodatkowe zabezpieczenie
+    - _guard chroni przed rekurencją (clamp wywołuje resizeSection → sygnał → clamp...)
     """
 
     def __init__(self, orientation, min_widths: list[int], max_widths: list[int], parent=None):
         super().__init__(orientation, parent)
         self._min_w = min_widths
         self._max_w = max_widths
+        self._guard = False  # rekurencja guard
         self.setSectionsMovable(False)
         self.setSectionsClickable(True)
         self.setHighlightSections(True)
+        # Podpięcie pod sygnał sectionResized — to jest główna linia obrony
+        self.sectionResized.connect(self._on_section_resized)
+
+    def _on_section_resized(self, logical_index: int, _old_size: int, new_size: int) -> None:
+        """Wywoływane przez Qt przy każdej zmianie szerokości sekcji."""
+        if self._guard:
+            return
+        mn = self._min_w[logical_index] if logical_index < len(self._min_w) else 40
+        mx = self._max_w[logical_index] if logical_index < len(self._max_w) else 9999
+        clamped = max(mn, min(mx, new_size))
+        if clamped != new_size:
+            self._guard = True
+            try:
+                self.resizeSection(logical_index, clamped)
+            finally:
+                self._guard = False
 
     def _clamp_all(self) -> None:
-        for col in range(self.count()):
-            w = self.sectionSize(col)
-            mn = self._min_w[col] if col < len(self._min_w) else 40
-            mx = self._max_w[col] if col < len(self._max_w) else 9999
-            clamped = max(mn, min(mx, w))
-            if clamped != w:
-                self.blockSignals(True)
-                self.resizeSection(col, clamped)
-                self.blockSignals(False)
+        """Wymusza limity na wszystkich kolumnach naraz."""
+        if self._guard:
+            return
+        self._guard = True
+        try:
+            for col in range(self.count()):
+                w = self.sectionSize(col)
+                mn = self._min_w[col] if col < len(self._min_w) else 40
+                mx = self._max_w[col] if col < len(self._max_w) else 9999
+                clamped = max(mn, min(mx, w))
+                if clamped != w:
+                    self.resizeSection(col, clamped)
+        finally:
+            self._guard = False
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseMoveEvent(event)
