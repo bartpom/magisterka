@@ -57,9 +57,8 @@ COL_PCT    = 3
 COL_C2PA   = 4
 COL_CSV    = 5
 
-# Minimalne i maksymalne szerokości kolumn
+# Minimalne szerokości kolumn — twarde dno, poniżej którego nie można zeskalować
 _COL_MIN_WIDTHS = [80, 45, 90, 100, 50, 80]
-_COL_MAX_WIDTHS = [500, 80, 200, 240, 100, 600]
 
 _SETTINGS_ORG  = "WatermarkDetector"
 _SETTINGS_APP  = "GUI"
@@ -292,99 +291,132 @@ class GripSplitter(QSplitter):
         return super().createHandle()
 
 
-# ======================== Clamp Header — ograniczenie szerokości kolumn ========================
+# ======================== ClampedHeader ========================
 
 class ClampedHeader(QHeaderView):
     """
-    QHeaderView z twardym ograniczeniem min/max szerokości per kolumna
-    oraz blokadą przed przekroczeniem sumarycznej szerokości viewportu tabeli.
+    QHeaderView z twardym ograniczeniem szerokości kolumn do viewportu tabeli.
 
-    Mechanizm:
-    - sectionResized (sygnał Qt) → _on_section_resized → clamp per-kolumna + clamp do viewportu
-    - mouseMoveEvent / mouseReleaseEvent → dodatkowe zabezpieczenie
-    - _guard chroni przed rekurencją (clamp wywołuje resizeSection → sygnał → clamp...)
-
-    Efekt: nie można rozciągnąć kolumn poza pionową kreską (granicą lewego panelu).
+    Zasada działania:
+    - Suma szerokości wszystkich kolumn NIGDY nie może przekroczyć szerokości
+      viewportu — przez co nie pojawia się poziomy pasek przewijania i nie można
+      „wyciągnąć" kolumny poza prawą pionową kreską tabeli.
+    - Każda kolumna ma zdefiniowaną minimalną szerokość (_COL_MIN_WIDTHS).
+    - Przy resize kolumny i: max dozwolona szerokość = viewport - suma min-width
+      pozostałych kolumn. Dzięki temu każda kolumna zawsze zachowuje swoje
+      minimum, a drag zatrzymuje się dokładnie przy granicy sąsiedniej kolumny.
+    - Po zwolnieniu myszy (_on_mouse_release) ostatnia kolumna jest
+      automatycznie dostosowywana do dokładnego wypełnienia reszty viewportu
+      (eliminuje puste miejsce lub overflow po zmianie rozmiaru okna).
+    - _guard zapobiega rekurencji: clamp wywołuje resizeSection → sygnał →
+      _on_section_resized → clamp → ...
     """
 
-    def __init__(self, orientation, min_widths: list[int], max_widths: list[int], parent=None):
+    def __init__(self, orientation, min_widths: list[int], parent=None):
         super().__init__(orientation, parent)
         self._min_w = min_widths
-        self._max_w = max_widths
-        self._guard = False  # rekurencja guard
+        self._guard = False
         self.setSectionsMovable(False)
         self.setSectionsClickable(True)
         self.setHighlightSections(True)
-        # Podpięcie pod sygnał sectionResized — to jest główna linia obrony
         self.sectionResized.connect(self._on_section_resized)
 
-    def _viewport_width(self) -> int:
-        """Zwraca szerokość viewportu tabeli-rodzica (to jest faktyczny dostępny obszar)."""
-        parent = self.parentWidget()
-        if parent is not None and hasattr(parent, "viewport"):
-            return parent.viewport().width()  # type: ignore[union-attr]
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    def _viewport_w(self) -> int:
+        """Szerokość viewportu tabeli-rodzica (faktyczny dostępny obszar)."""
+        p = self.parentWidget()
+        if p is not None and hasattr(p, "viewport"):
+            return p.viewport().width()
         return self.width()
 
-    def _on_section_resized(self, logical_index: int, _old_size: int, new_size: int) -> None:
-        """Wywoływane przez Qt przy każdej zmianie szerokości sekcji."""
+    def _min(self, col: int) -> int:
+        return self._min_w[col] if col < len(self._min_w) else 40
+
+    def _max_for_col(self, col: int) -> int:
+        """
+        Maksymalna szerokość kolumny `col` = viewport - suma minimalnych
+        szerokości wszystkich pozostałych kolumn.
+        Gwarantuje, że każda inna kolumna zawsze zmieści swoje minimum.
+        """
+        vw = self._viewport_w()
+        if vw <= 0:
+            return 9999
+        other_min_sum = sum(
+            self._min(i) for i in range(self.count()) if i != col
+        )
+        return max(self._min(col), vw - other_min_sum)
+
+    # ------------------------------------------------------------------
+    # główny clamp — wywoływany przez sygnał sectionResized
+    # ------------------------------------------------------------------
+
+    def _on_section_resized(self, col: int, _old: int, new_size: int) -> None:
         if self._guard:
             return
-        # 1) Clamp per-kolumna (min/max z listy)
-        mn = self._min_w[logical_index] if logical_index < len(self._min_w) else 40
-        mx = self._max_w[logical_index] if logical_index < len(self._max_w) else 9999
+        mn = self._min(col)
+        mx = self._max_for_col(col)
         clamped = max(mn, min(mx, new_size))
-
-        # 2) Clamp do viewportu — suma wszystkich kolumn nie może przekroczyć szerokości viewportu
-        viewport_w = self._viewport_width()
-        if viewport_w > 0:
-            total_other = sum(
-                self.sectionSize(i)
-                for i in range(self.count())
-                if i != logical_index
-            )
-            max_for_this = max(mn, viewport_w - total_other)
-            clamped = min(clamped, max_for_this)
-
-        if clamped != new_size:
-            self._guard = True
-            try:
-                self.resizeSection(logical_index, clamped)
-            finally:
-                self._guard = False
-
-    def _clamp_all(self) -> None:
-        """Wymusza limity na wszystkich kolumnach naraz (min/max + viewport)."""
-        if self._guard:
+        if clamped == new_size:
             return
         self._guard = True
         try:
-            viewport_w = self._viewport_width()
-            for col in range(self.count()):
-                w = self.sectionSize(col)
-                mn = self._min_w[col] if col < len(self._min_w) else 40
-                mx = self._max_w[col] if col < len(self._max_w) else 9999
-                clamped = max(mn, min(mx, w))
-                # Dodatkowy clamp do viewportu dla każdej kolumny
-                if viewport_w > 0:
-                    total_other = sum(
-                        self.sectionSize(i)
-                        for i in range(self.count())
-                        if i != col
-                    )
-                    max_for_col = max(mn, viewport_w - total_other)
-                    clamped = min(clamped, max_for_col)
-                if clamped != w:
-                    self.resizeSection(col, clamped)
+            self.resizeSection(col, clamped)
         finally:
             self._guard = False
 
+    # ------------------------------------------------------------------
+    # wyrównanie po zakończeniu drag — wypełnij resztę ostatnią kolumną
+    # ------------------------------------------------------------------
+
+    def _fill_last_column(self) -> None:
+        """
+        Dopasowuje ostatnią kolumnę tak, żeby suma szerokości = viewport.
+        Efekt: brak pustej szarej przestrzeni i brak overflow.
+        """
+        if self._guard:
+            return
+        vw = self._viewport_w()
+        if vw <= 0 or self.count() == 0:
+            return
+        last = self.count() - 1
+        other_sum = sum(self.sectionSize(i) for i in range(last))
+        desired = max(self._min(last), vw - other_sum)
+        if desired == self.sectionSize(last):
+            return
+        self._guard = True
+        try:
+            self.resizeSection(last, desired)
+        finally:
+            self._guard = False
+
+    # ------------------------------------------------------------------
+    # mouse events — dodatkowe zabezpieczenie w trakcie drag
+    # ------------------------------------------------------------------
+
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseMoveEvent(event)
-        self._clamp_all()
+        # Clamp w trakcie drag — blokuje przekroczenie granicy jeszcze przed
+        # mouseRelease, dzięki czemu kursor nie "ucieka" za viewport.
+        if self._guard:
+            return
+        for col in range(self.count()):
+            w = self.sectionSize(col)
+            mx = self._max_for_col(col)
+            mn = self._min(col)
+            clamped = max(mn, min(mx, w))
+            if clamped != w:
+                self._guard = True
+                try:
+                    self.resizeSection(col, clamped)
+                finally:
+                    self._guard = False
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
-        self._clamp_all()
+        self._fill_last_column()
 
 
 # ======================== Drop Overlay ========================
@@ -899,18 +931,17 @@ class MainWindow(QMainWindow):
             "Plik", "Typ", "Status AI", "% AI w wideo", "C2PA", "Raport CSV"
         ])
 
-        # ── ClampedHeader zamiast domyślnego QHeaderView ──
+        # ── ClampedHeader — twardy clamp do viewportu, bez _COL_MAX_WIDTHS ──
         clamped_hh = ClampedHeader(
             Qt.Orientation.Horizontal,
             _COL_MIN_WIDTHS,
-            _COL_MAX_WIDTHS,
             self.table_results,
         )
         clamped_hh.setStretchLastSection(False)
         self.table_results.setHorizontalHeader(clamped_hh)
         clamped_hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
 
-        # Wyłącz poziomy scrollbar — kolumny nie mogą wychodzić poza viewport
+        # Poziomy scrollbar wyłączony — kolumny nie wychodzą poza viewport
         self.table_results.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
@@ -1065,8 +1096,7 @@ class MainWindow(QMainWindow):
                 for col, w in enumerate(widths):
                     if col < self.table_results.columnCount():
                         mn = _COL_MIN_WIDTHS[col] if col < len(_COL_MIN_WIDTHS) else 40
-                        mx = _COL_MAX_WIDTHS[col] if col < len(_COL_MAX_WIDTHS) else 9999
-                        safe_w = max(mn, min(mx, w))
+                        safe_w = max(mn, w)
                         self.table_results.setColumnWidth(col, safe_w)
             except Exception:
                 self._settings.remove(_KEY_TABLE_COLS)
