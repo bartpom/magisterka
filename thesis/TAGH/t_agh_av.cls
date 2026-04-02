@@ -62,7 +62,7 @@
     {l}{{\l{}}}1
     {s}{{\'{s}}}1
     {z}{{\'{z}}}1
-    {z}{{\.z}}1
+    {z}{{\\.z}}1
     {A}{{\k{A}}}1
     {C}{{\'{C}}}1
     {E}{{\k{E}}}1
@@ -71,7 +71,7 @@
     {L}{{\L{}}}1
     {S}{{\'{S}}}1
     {Z}{{\'{Z}}}1
-    {Z}{{\.Z}}1,
+    {Z}{{\\.Z}}1,
   basicstyle=\footnotesize\ttfamily,
 }
 
@@ -176,7 +176,8 @@
 
   {~~}\vspace{20mm}
 
-  {\large
+  % POPRAWKA: \noindent usuwa domyslne wciecie akapitowe na stronie oswiadczenia
+  \noindent{\large
     Uprzedzony o~odpowiedzialno\'sci karnej na~podstawie art.~115 ust.~1~i~2
     ustawy z~dnia 4~lutego 1994~r. o~prawie autorskim i~prawach pokrewnych
     (t.j. Dz.U. z~2006~r. Nr~90, poz.~631 z~p{\'o}{\'z}n.\ zm.):
