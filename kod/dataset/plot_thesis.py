@@ -46,12 +46,17 @@ EVAL_CSV    = RESULTS_DIR / "evaluation_results.csv"
 # --- styl ------------------------------------------------------------------
 plt.rcParams.update({
     "font.family": "serif",
-    "font.size": 12,
+    "font.size": 13,
     "axes.spines.top": False,
     "axes.spines.right": False,
     "axes.grid": True,
     "grid.alpha": 0.35,
     "grid.linestyle": "--",
+    "axes.titlesize": 14,
+    "axes.labelsize": 13,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 11,
 })
 
 CATEGORY_ORDER = ["ai_baseline", "adv_compressed", "adv_cropped", "adv_fp_trap"]
@@ -119,7 +124,7 @@ def plot_metrics_per_category(rows_metrics: list[dict]) -> None:
     x     = np.arange(len(cats))
     width = 0.19
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(13, 6.5))
     for i, (key, label, color) in enumerate(zip(metric_keys, metric_labels, metric_colors)):
         vals = [_f(data_map[c].get(key, 0)) for c in cats]
         offset = (i - 1.5) * width
@@ -136,12 +141,25 @@ def plot_metrics_per_category(rows_metrics: list[dict]) -> None:
 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=11)
-    ax.set_ylim(0, 1.18)
-    ax.set_ylabel("Wartosc")
-    ax.set_title("Metryki klasyfikatora per kategoria zbioru testowego", fontsize=13, pad=10)
+    ax.set_ylim(0, 1.22)
+    ax.set_ylabel("Warto\u015b\u0107")
+    ax.set_title("Metryki klasyfikatora per kategoria zbioru testowego", fontsize=14, pad=10)
     ax.legend(loc="upper right", framealpha=0.9)
-    ax.axhline(0.80, color="gray", linestyle=":", linewidth=1.2, label="prog recall = 0.80")
-    ax.axhline(1/7, color="#d7191c", linestyle=":", linewidth=1.0, label="prog FPR = 1/7")
+    ax.axhline(0.80, color="gray", linestyle=":", linewidth=1.4, label="pr\xf3g recall = 0.80")
+    ax.axhline(1/7, color="#d7191c", linestyle=":", linewidth=1.2, label="pr\xf3g FPR = 1/7")
+
+    # adnotacja dla FP trap — metryka kluczowa to FPR, nie recall
+    fp_idx = cats.index("adv_fp_trap") if "adv_fp_trap" in cats else None
+    if fp_idx is not None:
+        ax.annotate(
+            "Metryka\nkluczowa: FPR",
+            xy=(fp_idx, 0.12),
+            xytext=(fp_idx - 0.55, 0.32),
+            fontsize=9,
+            color="#d7191c",
+            arrowprops=dict(arrowstyle="->", color="#d7191c", lw=1.2),
+        )
+
     fig.tight_layout()
     save(fig, "01_metrics_per_category.png")
 
@@ -171,7 +189,7 @@ def plot_confusion_heatmap(rows_metrics: list[dict]) -> None:
             color = "white" if cm[i, j] > cm.max() * 0.55 else "black"
             ax.text(j, i, str(cm[i, j]), ha="center", va="center",
                     fontsize=22, fontweight="bold", color=color)
-    ax.set_title("Macierz konfuzji — system fuzji multi-sygnalow", fontsize=13, pad=12)
+    ax.set_title("Macierz konfuzji \u2014 system fuzji multi-sygna\u0142\xf3w", fontsize=13, pad=12)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     fig.tight_layout()
     save(fig, "02_confusion_heatmap.png")
@@ -188,8 +206,8 @@ def plot_signal_boxplots(rows_raw: list[dict]) -> None:
 
     cats = [c for c in CATEGORY_ORDER if c in grouped]
     signals = [
-        ("of_count",          "Liczba konturow OF",        "OF count"),
-        ("freq_hf_ratio_mean", "Sredni udzial HF",          "HF ratio"),
+        ("of_count",          "Liczba kontur\xf3w OF",     "OF count"),
+        ("freq_hf_ratio_mean", "\u015aredni udzia\u0142 HF", "HF ratio"),
         ("zv_max_score",       "Maks. wynik ZV",            "ZV max score"),
         ("ai_style_prob",      "Prawdopod. AI (CLIP)",      "CLIP AI prob"),
     ]
@@ -220,7 +238,7 @@ def plot_signal_boxplots(rows_raw: list[dict]) -> None:
     fig.legend(handles=legend_handles, loc="upper center", ncol=4,
                fontsize=10, bbox_to_anchor=(0.5, 1.02))
     fig.suptitle(
-        "Rozklady sygnalów diagnostycznych per kategoria",
+        "Rozk\u0142ady sygna\u0142\xf3w diagnostycznych per kategoria",
         fontsize=13, y=1.07,
     )
     fig.tight_layout()
@@ -253,7 +271,6 @@ def plot_detector_contribution(rows_raw: list[dict]) -> None:
         "C2PA":              lambda r: _i(r.get("c2pa_ai", 0)) == 1,
     }
 
-    # liczymy per kategoria
     cats = [c for c in CATEGORY_ORDER if c != "adv_fp_trap"]
     cat_groups = defaultdict(list)
     for r in ai_rows:
@@ -263,7 +280,7 @@ def plot_detector_contribution(rows_raw: list[dict]) -> None:
     x = np.arange(len(det_names))
     width = 0.25
 
-    fig, ax = plt.subplots(figsize=(13, 6))
+    fig, ax = plt.subplots(figsize=(14, 6.5))
     for i, cat in enumerate(cats):
         grp = cat_groups.get(cat, [])
         if not grp:
@@ -281,9 +298,9 @@ def plot_detector_contribution(rows_raw: list[dict]) -> None:
 
     ax.set_xticks(x)
     ax.set_xticklabels(det_names, rotation=18, ha="right", fontsize=10)
-    ax.set_ylim(0, 1.18)
-    ax.set_ylabel("Odsetek wykrytych filmow AI")
-    ax.set_title("Skutecznosc poszczegolnych detektorow (niezaleznie od fuzji)",
+    ax.set_ylim(0, 1.22)
+    ax.set_ylabel("Odsetek wykrytych film\xf3w AI")
+    ax.set_title("Skuteczno\u015b\u0107 poszczeg\xf3lnych detektor\xf3w (niezale\u017cnie od fuzji)",
                  fontsize=13, pad=10)
     ax.legend(loc="upper right", framealpha=0.9)
     fig.tight_layout()
@@ -318,12 +335,18 @@ def plot_roc_curve(rows_eval: list[dict]) -> None:
     fprs = [0.0] + fprs + [1.0]
     auc = float(np.trapz(tprs, fprs))
 
-    fig, ax = plt.subplots(figsize=(7, 6))
-    ax.plot(fprs, tprs, color="#2c7bb6", linewidth=2, label=f"System (AUC = {auc:.3f})")
+    fig, ax = plt.subplots(figsize=(7, 6.5))
+    ax.plot(fprs, tprs, color="#2c7bb6", linewidth=2.5, label=f"System (AUC\u00a0=\u00a0{auc:.3f})")
     ax.plot([0, 1], [0, 1], "k--", linewidth=1, alpha=0.5, label="Losowy klasyfikator")
+    # zaznaczamy punkt operacyjny (FPR=0.119, TPR=recall)
+    op_fpr = 0.119
+    op_tpr_candidates = [(abs(f - op_fpr), t) for f, t in zip(fprs, tprs)]
+    op_tpr = min(op_tpr_candidates)[1]
+    ax.scatter([op_fpr], [op_tpr], color="#d7191c", zorder=5, s=60,
+               label=f"Punkt operacyjny (FPR={op_fpr:.2f}, TPR={op_tpr:.2f})")
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate (Recall)")
-    ax.set_title("Krzywa ROC — system fuzji multi-sygnalow", fontsize=13, pad=10)
+    ax.set_title("Krzywa ROC \u2014 system fuzji multi-sygna\u0142\xf3w", fontsize=13, pad=10)
     ax.legend(loc="lower right", framealpha=0.9)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1.02)
@@ -352,10 +375,10 @@ def plot_score_distribution(rows_eval: list[dict]) -> None:
     fig, ax = plt.subplots(figsize=(9, 5.5))
     ax.hist(ai_scores,   bins=bins, alpha=0.68, color="#2c7bb6", label="AI (gt=1)",   edgecolor="white")
     ax.hist(real_scores, bins=bins, alpha=0.68, color="#d7191c", label="Real (gt=0)", edgecolor="white")
-    ax.axvline(5, color="black", linestyle="--", linewidth=1.5, label="Prog decyzji = 5")
+    ax.axvline(5, color="black", linestyle="--", linewidth=1.8, label="Pr\xf3g decyzji = 5")
     ax.set_xlabel("Wynik fuzji (fusion_score)")
-    ax.set_ylabel("Liczba filmow")
-    ax.set_title("Rozklad wynikow fuzji — AI vs. filmy rzeczywiste", fontsize=13, pad=10)
+    ax.set_ylabel("Liczba film\xf3w")
+    ax.set_title("Rozk\u0142ad wynik\xf3w fuzji \u2014 AI vs. filmy rzeczywiste", fontsize=13, pad=10)
     ax.legend(framealpha=0.9)
     fig.tight_layout()
     save(fig, "06_score_distribution.png")
