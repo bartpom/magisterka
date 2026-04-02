@@ -23,6 +23,7 @@ Kategorie:
 from __future__ import annotations
 import csv
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -33,8 +34,25 @@ from typing import Any
 from statistics import mean
 import cv2
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from advanced_detectors import initialize_invisible_watermark, run_advanced_scan
+try:
+    from ai_style_clip_detector import AIStyleCLIPDetector  # type: ignore
+except Exception:
+    AIStyleCLIPDetector = None  # type: ignore
+try:
+    from flux_fft_detector import FluxFFTDetector  # type: ignore
+except Exception:
+    FluxFFTDetector = None  # type: ignore
+try:
+    from temporal_consistency_detector import TemporalConsistencyDetector  # type: ignore
+except Exception:
+    TemporalConsistencyDetector = None  # type: ignore
 try:
     from c2pa_detector import detect_c2pa  # type: ignore
 except Exception:
@@ -65,6 +83,9 @@ from fusion_params import (
     HF_RATIO_THRESHOLD_SWEEP,
     HF_RATIO_THRESHOLD,
     HIGH_SCORE_OVERRIDE_THRESHOLD,
+    AI_STYLE_CLIP_HIGH_CONF_THRESHOLD,
+    AI_STYLE_SOFT_OVERRIDE_SCORE,
+    LOWER_THIRD_QUALITY_PROB_THRESHOLD,
     LOW_TEXTURE_THRESHOLD_SWEEP,
     LOWER_THIRD_HARD_THRESHOLD,
     LOWER_THIRD_HARD_UPPER_MAX,
@@ -74,9 +95,6 @@ from fusion_params import (
     POINTS_THRESHOLD_SWEEP,
     SCOREBOARD_HF_MIN,
 )
-
-# Test F: globalny prog detekcji ustawiony na 5 (zamiast 4).
-POINTS_THRESHOLD_DEFAULT = 5
 
 DATASET_ROOT = Path(__file__).parent
 RESULTS_BASE = DATASET_ROOT.parent / "results"
@@ -99,6 +117,9 @@ RAW_FIELDS = [
     "broadcast_scoreboard_trap", "broadcast_billboard_trap",
     "broadcast_pattern_trap", "broadcast_lower_third_pattern", "broadcast_scoreboard_pattern", "broadcast_billboard_pattern",
     "iw_found", "iw_best_similarity", "iw_matched", "iw_method",
+    "flux_found", "flux_similarity", "flux_similarity_std", "flux_method",
+    "ai_style_prob", "ai_style_detected", "flux_fft_score", "fft_bonus", "flux_combined",
+    "tc_score", "tc_detected", "tc_frame_diff_variance", "tc_of_smoothness", "tc_luminance_temporal_std", "tc_bonus",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
     "c2pa_found", "c2pa_ai", "c2pa_generator", "c2pa_error",
     "frames_sampled", "duration_s", "detector_version",
@@ -108,6 +129,9 @@ EVAL_FIELDS = [
     "category", "filename", "ground_truth",
     "detected", "fusion_score", "fusion_mode", "ai_specific", "broadcast_trap", "high_score_override",
     "zv_count", "zv_lower_third_roi_count", "of_count", "of_max_area_ratio", "iw_best_similarity", "iw_matched",
+    "flux_found", "flux_similarity", "flux_similarity_std", "flux_method",
+    "ai_style_prob", "ai_style_detected", "flux_fft_score", "fft_bonus", "flux_combined",
+    "tc_score", "tc_detected", "tc_frame_diff_variance", "tc_of_smoothness", "tc_luminance_temporal_std", "tc_bonus",
     "fft_score", "of_texture_variance_mean", "of_low_texture_roi_count",
     "of_wide_lower_roi_count", "of_corner_compact_roi_count", "of_lower_third_roi_ratio",
     "of_upper_third_roi_ratio", "of_center_roi_ratio", "of_wide_top_bottom_count",
@@ -116,7 +140,7 @@ EVAL_FIELDS = [
     "freq_hf_ratio_mean", "c2pa_found", "c2pa_ai", "c2pa_generator", "duration_s",
 ]
 
-DETECTOR_VERSION = "adv_v6_hf_texture_sweep"
+DETECTOR_VERSION = "adv_v7_ai_style_clip_fft"
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -221,6 +245,39 @@ def detect_c2pa_signal(video_path: Path) -> dict[str, Any]:
     }
 
 
+def initialize_ai_style_clip_detector() -> tuple[Any, str]:
+    if AIStyleCLIPDetector is None:
+        return None, "AIStyleCLIPDetector import failed"
+    try:
+        detector = AIStyleCLIPDetector(model_path=DATASET_ROOT.parent.parent / "clip_classifier.pkl")
+        if not getattr(detector, "enabled", False):
+            reason = getattr(detector, "load_error", "detector_disabled")
+            return None, reason
+        return detector, "OK"
+    except Exception as exc:  # noqa: BLE001
+        return None, str(exc)
+
+
+def initialize_flux_fft_detector() -> tuple[Any, str]:
+    if FluxFFTDetector is None:
+        return None, "FluxFFTDetector import failed"
+    try:
+        detector = FluxFFTDetector(thresholds_path=DATASET_ROOT.parent.parent / "flux_fft_thresholds.json")
+        return detector, "OK"
+    except Exception as exc:  # noqa: BLE001
+        return None, str(exc)
+
+
+def initialize_temporal_detector() -> tuple[Any, str]:
+    if TemporalConsistencyDetector is None:
+        return None, "TemporalConsistencyDetector import failed"
+    try:
+        detector = TemporalConsistencyDetector()
+        return detector, "OK"
+    except Exception as exc:  # noqa: BLE001
+        return None, str(exc)
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Fuzja sygnalow
 # ───────────────────────────────────────────────────────────────────────
@@ -242,6 +299,7 @@ def compute_ai_score(
     low_hf = float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold
     iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
     c2pa_ai = int(row.get("c2pa_ai", 0)) == 1
+    flux_detected = int(row.get("flux_combined", row.get("flux_detected", 0))) == 1
     zv_count = int(row.get("zv_count", 0))
     wide_lower = int(row.get("of_wide_lower_roi_count", 0))
     corner_compact = int(row.get("of_corner_compact_roi_count", 0))
@@ -273,6 +331,8 @@ def compute_ai_score(
         score += 2
     if c2pa_ai:
         score += 2
+    if flux_detected:
+        score += 3
     # Geometry-aware refinements:
     if wide_lower >= 1:
         score -= 2
@@ -322,6 +382,7 @@ def compute_ai_flags(
     max_area_ratio_threshold: float = MAX_AREA_RATIO_THRESHOLD,
 ) -> tuple[int, int]:
     iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+    flux_detected = int(row.get("flux_combined", row.get("flux_detected", 0))) == 1
     shape_signal = (
         int(row.get("of_corner_compact_roi_count", 0)) >= 1
         or float(row.get("of_max_area_ratio", 1.0)) < max_area_ratio_threshold
@@ -334,7 +395,7 @@ def compute_ai_flags(
         and float(row.get("of_max_area_ratio", 1.0)) < max_area_ratio_threshold,
     ]
     c2pa_ai = int(row.get("c2pa_ai", 0)) == 1
-    ai_specific = int(iw_strong or c2pa_ai or sum(ai_signals) >= 2)
+    ai_specific = int(iw_strong or c2pa_ai or flux_detected or sum(ai_signals) >= 2)
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
     upper_third_ratio = float(row.get("of_upper_third_roi_ratio", 1.0))
     center_ratio = float(row.get("of_center_roi_ratio", 0.0))
@@ -410,6 +471,17 @@ def fuse(
     broadcast_billboard_pattern: int,
     freq_hf_ratio_mean: float,
     c2pa_ai: int = 0,
+    flux_detected: int = 0,
+    flux_similarity: float = 0.0,
+    flux_similarity_std: float = 0.0,
+    ai_style_prob: float = 0.0,
+    ai_style_detected: int = 0,
+    flux_fft_score: int = 0,
+    fft_bonus: int = 0,
+    flux_combined: int = 0,
+    tc_score: int = 0,
+    tc_detected: int = 0,
+    tc_bonus: int = 0,
     points_threshold: int = POINTS_THRESHOLD_DEFAULT,
     low_texture_threshold: int = LOW_TEXTURE_THRESHOLD,
     hf_ratio_threshold: float = HF_RATIO_THRESHOLD,
@@ -440,6 +512,17 @@ def fuse(
         "broadcast_billboard_pattern": broadcast_billboard_pattern,
         "freq_hf_ratio_mean": freq_hf_ratio_mean,
         "c2pa_ai": c2pa_ai,
+        "flux_detected": flux_detected,
+        "flux_similarity": flux_similarity,
+        "flux_similarity_std": flux_similarity_std,
+        "ai_style_prob": ai_style_prob,
+        "ai_style_detected": ai_style_detected,
+        "flux_fft_score": flux_fft_score,
+        "fft_bonus": fft_bonus,
+        "flux_combined": flux_combined,
+        "tc_score": tc_score,
+        "tc_detected": tc_detected,
+        "tc_bonus": tc_bonus,
     }
     score = compute_ai_score(
         row,
@@ -453,13 +536,54 @@ def fuse(
         hf_ratio_threshold=hf_ratio_threshold,
         max_area_ratio_threshold=max_area_ratio_threshold,
     )
+    score += int(max(0, fft_bonus))
+    score += int(max(0, tc_bonus))
+    clip_prob = float(ai_style_prob)
     lower_third_ok = not broadcast_trap
+    # Fix D: lower-third quality gate (nie wzmacniaj sygnalu lower-third,
+    # jesli brak AI-specific i CLIP ma niskie prawdopodobienstwo AI).
+    lower_third_effective = int(
+        lower_third_ok and (ai_specific == 1 or clip_prob > LOWER_THIRD_QUALITY_PROB_THRESHOLD)
+    )
+
+    # Fix A: broadcast_score_cap
+    broadcast_score_cap_applied = 0
+    if (
+        int(row.get("broadcast_pattern_trap", 0)) == 1
+        and int(c2pa_ai) == 0
+        and int(flux_combined) == 0
+        and clip_prob < 0.55
+        and float(score) > 3.0
+    ):
+        score = 3
+        broadcast_score_cap_applied = 1
+
     points_score = score
+
+    # Fix B: optical_flow_penalty
+    of_penalty_applied = 0
+    if (
+        int(row.get("of_count", 0)) > 20
+        and int(ai_specific) == 0
+        and int(c2pa_ai) == 0
+        and clip_prob < 0.55
+    ):
+        points_score -= 2
+        score = points_score
+        of_penalty_applied = 1
+
+    # Fix C: soft_threshold_tighten
+    soft_threshold_min_score = 3
+    if ai_specific == 0 and int(lower_third_effective) == 0 and clip_prob < 0.55:
+        soft_threshold_min_score = 4
+    elif clip_prob < 0.55 and int(c2pa_ai) == 0 and int(flux_combined) == 0:
+        soft_threshold_min_score = 4
+
     soft_threshold_hit = (
         ai_specific == 1
         and int(broadcast_trap) == 0
         and int(row.get("of_count", 0)) >= 10
-        and points_score >= 3
+        and points_score >= soft_threshold_min_score
         and points_score < points_threshold
         and int(c2pa_ai) == 0
     )
@@ -476,17 +600,35 @@ def fuse(
         clean_ai_candidate
         and float(row.get("of_max_area_ratio", 1.0)) < CLEAN_AI_MAX_AREA_RATIO
     )
+    flux_soft_override = (
+        int(flux_combined) == 1
+        and float(points_score) >= float(AI_STYLE_SOFT_OVERRIDE_SCORE)
+        and int(row.get("broadcast_pattern_trap", 0)) == 0
+    )
     detected = int(
         soft_threshold_hit
         or points_score >= POINTS_THRESHOLD_DEFAULT
         or (ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_strict)
+        or flux_soft_override
     )
     mode = (
         f"ai_score={score};ai_specific={int(ai_specific)};"
-        f"lower_third_ok={int(lower_third_ok)};c2pa_ai={int(c2pa_ai)}"
+        f"lower_third_ok={int(lower_third_ok)};lower_third_effective={int(lower_third_effective)};"
+        f"c2pa_ai={int(c2pa_ai)};"
+        f"flux={int(flux_combined)};ai_style_prob={float(ai_style_prob):.2f};"
+        f"flux_fft_score={int(flux_fft_score)};fft_bonus={int(fft_bonus)};"
+        f"tc_score={int(tc_score)};tc_bonus={int(tc_bonus)}"
     )
     if soft_threshold_hit:
         mode += ";soft_threshold=1"
+    if soft_threshold_min_score > 3:
+        mode += f";soft_threshold_min={int(soft_threshold_min_score)}"
+    if flux_soft_override:
+        mode += ";flux_soft_override=1"
+    if broadcast_score_cap_applied:
+        mode += ";guard_broadcast_score_cap=1"
+    if of_penalty_applied:
+        mode += ";guard_of_penalty=1"
     return detected, float(score), mode, int(ai_specific), int(broadcast_trap)
 
 
@@ -768,6 +910,17 @@ def run_threshold_sweep(raw_rows: list[dict]) -> dict[str, list[dict]]:
                         broadcast_billboard_pattern=int(r.get("broadcast_billboard_pattern", 0)),
                         freq_hf_ratio_mean=float(r.get("freq_hf_ratio_mean", 0.0)),
                         c2pa_ai=int(r.get("c2pa_ai", 0)),
+                        flux_detected=int(r.get("flux_found", 0)),
+                        flux_similarity=float(r.get("flux_similarity", 0.0)),
+                        flux_similarity_std=float(r.get("flux_similarity_std", 0.0)),
+                        ai_style_prob=float(r.get("ai_style_prob", 0.0)),
+                        ai_style_detected=int(r.get("ai_style_detected", 0)),
+                        flux_fft_score=int(r.get("flux_fft_score", 0)),
+                        fft_bonus=int(r.get("fft_bonus", 0)),
+                        flux_combined=int(r.get("flux_combined", 0)),
+                        tc_score=int(r.get("tc_score", 0)),
+                        tc_detected=int(r.get("tc_detected", 0)),
+                        tc_bonus=int(r.get("tc_bonus", 0)),
                         points_threshold=pts_thr,
                         low_texture_threshold=tex_thr,
                         hf_ratio_threshold=hf_thr,
@@ -890,6 +1043,23 @@ def main() -> None:
     else:
         reason = rivagan_init.get("reason", "unknown")
         print(f"[INIT] rivaGAN unavailable: {reason}")
+    ai_style_clip, ai_style_clip_reason = initialize_ai_style_clip_detector()
+    if ai_style_clip is None:
+        print(f"[INIT] AIStyleCLIPDetector unavailable: {ai_style_clip_reason}")
+    else:
+        clip_thr = float(getattr(ai_style_clip, "threshold", 0.5))
+        print(f"[INIT] AIStyleCLIPDetector loaded (threshold={clip_thr:.2f}).")
+
+    flux_fft_detector, flux_fft_reason = initialize_flux_fft_detector()
+    if flux_fft_detector is None:
+        print(f"[INIT] FluxFFTDetector unavailable: {flux_fft_reason}")
+    else:
+        print("[INIT] FluxFFTDetector loaded (bonus mode).")
+    temporal_detector, temporal_reason = initialize_temporal_detector()
+    if temporal_detector is None:
+        print(f"[INIT] TemporalConsistencyDetector unavailable: {temporal_reason}")
+    else:
+        print("[INIT] TemporalConsistencyDetector loaded.")
 
     raw_rows:  list[dict] = []
     eval_rows: list[dict] = []
@@ -910,6 +1080,104 @@ def main() -> None:
                 result, elapsed = scan_video(vp)
                 sig = extract_signals(result)
                 c2pa_sig = detect_c2pa_signal(vp)
+                if ai_style_clip is not None:
+                    try:
+                        clip_result = ai_style_clip.detect_video(vp)
+                    except Exception as clip_err:  # noqa: BLE001
+                        clip_result = {
+                            "ai_style_prob": 0.0,
+                            "ai_style_detected": False,
+                            "ai_style_threshold": 0.5,
+                            "ai_style_top_dims": [],
+                            "error": str(clip_err),
+                        }
+                else:
+                    clip_result = {
+                        "ai_style_prob": 0.0,
+                        "ai_style_detected": False,
+                        "ai_style_threshold": 0.5,
+                        "ai_style_top_dims": [],
+                        "error": ai_style_clip_reason,
+                    }
+
+                if flux_fft_detector is not None:
+                    try:
+                        fft_flux = flux_fft_detector.detect_video(vp)
+                    except Exception as fft_err:  # noqa: BLE001
+                        fft_flux = {
+                            "fft_score": 0,
+                            "fft_bonus": 0,
+                            "metrics": {},
+                            "active_metrics": [],
+                            "error": str(fft_err),
+                        }
+                else:
+                    fft_flux = {
+                        "fft_score": 0,
+                        "fft_bonus": 0,
+                        "metrics": {},
+                        "active_metrics": [],
+                        "error": flux_fft_reason,
+                    }
+
+                if temporal_detector is not None:
+                    try:
+                        tc_result = temporal_detector.detect_video(vp)
+                    except Exception as tc_err:  # noqa: BLE001
+                        tc_result = {
+                            "tc_score": 0,
+                            "tc_detected": False,
+                            "frame_diff_variance": 0.0,
+                            "of_smoothness": 0.0,
+                            "luminance_temporal_std": 0.0,
+                            "error": str(tc_err),
+                        }
+                else:
+                    tc_result = {
+                        "tc_score": 0,
+                        "tc_detected": False,
+                        "frame_diff_variance": 0.0,
+                        "of_smoothness": 0.0,
+                        "luminance_temporal_std": 0.0,
+                        "error": temporal_reason,
+                    }
+
+                clip_prob = float(
+                    clip_result.get("ai_style_prob", clip_result.get("clip_ai_prob", 0.0))
+                )
+                clip_detected = bool(
+                    clip_result.get("ai_style_detected", clip_result.get("clip_detected", False))
+                )
+                fft_score_flux = int(fft_flux.get("fft_score", 0))
+                fft_bonus = int(fft_flux.get("fft_bonus", 0))
+                tc_score = int(tc_result.get("tc_score", 0))
+                tc_detected = bool(tc_result.get("tc_detected", False))
+                temporal_bonus = 0
+                # S1: conservative temporal bonus (requires moderate CLIP confidence)
+                # to avoid FP growth on broadcast-like real footage.
+                if clip_prob >= 0.50:
+                    if tc_detected:
+                        temporal_bonus = 2
+                    elif tc_score == 1:
+                        temporal_bonus = 1
+                flux_combined = bool(clip_prob > AI_STYLE_CLIP_HIGH_CONF_THRESHOLD)
+                print(
+                    "ADV AI-Style CLIP: "
+                    f"prob={clip_prob:.2f} "
+                    f"-> {'WYKRYTO' if flux_combined else 'brak'}"
+                )
+                if fft_bonus > 0:
+                    print(
+                        f"  ADV FFT bonus: +{fft_bonus} "
+                        f"(metrics: {fft_flux.get('metrics', {})})"
+                    )
+                if temporal_bonus > 0:
+                    print(
+                        f"  TEMPORAL +{temporal_bonus}: tc_score={tc_score}, "
+                        f"fdv={float(tc_result.get('frame_diff_variance', 0.0)):.4f}, "
+                        f"of_smooth={float(tc_result.get('of_smoothness', 0.0)):.3f}, "
+                        f"lum_std={float(tc_result.get('luminance_temporal_std', 0.0)):.3f}"
+                    )
 
                 raw_row = {
                     "category":         category,
@@ -917,6 +1185,21 @@ def main() -> None:
                     "ground_truth":     gt,
                     **sig,
                     **c2pa_sig,
+                    "flux_found":       int(flux_combined),
+                    "flux_similarity":  float(clip_prob),
+                    "flux_similarity_std": 0.0,
+                    "flux_method":      "clip+fft",
+                    "ai_style_prob":    float(clip_prob),
+                    "ai_style_detected": int(clip_detected),
+                    "flux_fft_score":   int(fft_score_flux),
+                    "fft_bonus":        int(fft_bonus),
+                    "flux_combined":    int(flux_combined),
+                    "tc_score":         int(tc_score),
+                    "tc_detected":      int(tc_detected),
+                    "tc_frame_diff_variance": float(tc_result.get("frame_diff_variance", 0.0)),
+                    "tc_of_smoothness": float(tc_result.get("of_smoothness", 0.0)),
+                    "tc_luminance_temporal_std": float(tc_result.get("luminance_temporal_std", 0.0)),
+                    "tc_bonus":         int(temporal_bonus),
                     "frames_sampled":   30,
                     "duration_s":       f"{elapsed:.2f}",
                     "detector_version": DETECTOR_VERSION,
@@ -948,6 +1231,17 @@ def main() -> None:
                     broadcast_billboard_pattern = sig["broadcast_billboard_pattern"],
                     freq_hf_ratio_mean = sig["freq_hf_ratio_mean"],
                     c2pa_ai = c2pa_sig["c2pa_ai"],
+                    flux_detected = int(flux_combined),
+                    flux_similarity = float(clip_prob),
+                    flux_similarity_std = 0.0,
+                    ai_style_prob = float(clip_prob),
+                    ai_style_detected = int(clip_detected),
+                    flux_fft_score = int(fft_score_flux),
+                    fft_bonus = int(fft_bonus),
+                    flux_combined = int(flux_combined),
+                    tc_score = int(tc_score),
+                    tc_detected = int(tc_detected),
+                    tc_bonus = int(temporal_bonus),
                 )
                 c2pa_override = int(c2pa_sig.get("c2pa_ai", 0)) == 1
                 if c2pa_override:
@@ -1032,6 +1326,21 @@ def main() -> None:
                     "of_max_area_ratio":  sig["of_max_area_ratio"],
                     "iw_best_similarity": sig["iw_best_similarity"],
                     "iw_matched":         sig["iw_matched"],
+                    "flux_found":         int(flux_combined),
+                    "flux_similarity":    float(clip_prob),
+                    "flux_similarity_std": 0.0,
+                    "flux_method":        "clip+fft",
+                    "ai_style_prob":      float(clip_prob),
+                    "ai_style_detected":  int(clip_detected),
+                    "flux_fft_score":     int(fft_score_flux),
+                    "fft_bonus":          int(fft_bonus),
+                    "flux_combined":      int(flux_combined),
+                    "tc_score":           int(tc_score),
+                    "tc_detected":        int(tc_detected),
+                    "tc_frame_diff_variance": float(tc_result.get("frame_diff_variance", 0.0)),
+                    "tc_of_smoothness":   float(tc_result.get("of_smoothness", 0.0)),
+                    "tc_luminance_temporal_std": float(tc_result.get("luminance_temporal_std", 0.0)),
+                    "tc_bonus":           int(temporal_bonus),
                     "fft_score":          sig["fft_score"],
                     "of_texture_variance_mean": sig["of_texture_variance_mean"],
                     "of_low_texture_roi_count": sig["of_low_texture_roi_count"],
@@ -1055,6 +1364,13 @@ def main() -> None:
                 }
                 eval_rows.append(eval_row)
 
+                if ";guard_broadcast_score_cap=1" in mode:
+                    print("  GUARD broadcast_score_cap applied: score capped at 3")
+                if ";guard_of_penalty=1" in mode:
+                    print(
+                        f"  GUARD of_penalty: -2 (contours={int(sig.get('of_count', 0))}, "
+                        "no ai_specific)"
+                    )
                 det_str = "WYKRYTO" if det else "brak"
                 print(f"{det_str}  score={score:.3f}  mode={mode}  ({elapsed:.1f}s)")
 
@@ -1102,7 +1418,7 @@ def main() -> None:
             )
 
     # —— Threshold sweep (na surowych sygnałach) ——
-    if raw_rows:
+    if raw_rows and os.getenv("EVAL_SKIP_SWEEP", "0") != "1":
         print("\n[SWEEP] Obliczam rozszerzony sweep heurystyk...")
         sweep = run_threshold_sweep(raw_rows)
         heuristic_rows = sweep["heuristic_rows"]
@@ -1153,6 +1469,8 @@ def main() -> None:
                 f"FPR_fptrap={row['FPR_adv_fp_trap']}  "
                 f"TPR_ai={row['TPR_aibaseline']}  F1={row['F1_global']}"
             )
+    elif raw_rows:
+        print("\n[SWEEP] Pominięty (EVAL_SKIP_SWEEP=1).")
 
     # —— Kopiuj do latest/ ——
     copy_to_latest(snap_dir)
