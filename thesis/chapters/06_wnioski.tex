@@ -1,92 +1,114 @@
-\chapter{Wnioski i kierunki dalszych badań}
+\chapter{Wnioski i~kierunki dalszych bada\'{n}}
 \label{chap:wnioski}
 
-\section{Podsumowanie wyników}
+\section{Podsumowanie wynik\'{o}w}
 
-Celem niniejszej pracy była analiza narzędzi i metod wykrywania treści generowanych
-przez sztuczną inteligencję w obszarze multimediów wideo, ze szczególnym uwzględnieniem
-praktycznej skuteczności dostępnych detektorów oraz zaproponowanie podejścia
-wielosygnałowego jako alternatywy dla rozwiązań komercyjnych.
+Celem niniejszej pracy by\l{}a analiza narz\k{e}dzi i~metod wykrywania tre\'{s}ci
+generowanych przez sztuczn\k{a} inteligencj\k{e} w~obszarze multimedi\'{o}w wideo,
+ze~szczeg\'{o}lnym uwzgl\k{e}dnieniem praktycznej skuteczno\'{s}ci dost\k{e}pnych detektor\'{o}w
+oraz zaproponowanie podej\'{s}cia wielosygna\l{}owego jako alternatywy dla~rozwi\k{a}za\'{n}
+komercyjnych.
 
-Przeprowadzone eksperymenty wykazały, że popularne narzędzie DetectVideo.ai zwraca
-wynik 55\% (inconclu\-sive) dla ponad 80\% testowanych materiałów, w tym dla nagrań
-autentycznych, co czyni je praktycznie bezużytecznym do binarnej klasyfikacji treści.
-Jedynie filmy o wyraźnych artefaktach wizualnych typowych dla generatywnych
-modeli (np.\ abstrakcyjne symulacje płynów, sceny fantasy) uzyskały wynik 72\%,
-co nadal nie przekracza przyjętego w literaturze progu pewności detekcji.
-Proponowane podejście wielosygnałowe --- łączące analizę spektralną, przepływ
-optyczny oraz analizę metadanych --- wykazuje zdolność do podjęcia jednoznacznej
-decyzji binarnej dla każdego badanego pliku, co stanowi jego kluczową przewagę
-praktyczną.
+Przeprowadzona ewaluacja na~zbiorze 137~plik\'{o}w wideo potwierdzi\l{}a,
+\.{z}e zaproponowany potok wielosygna\l{}owy --- \l{}\k{a}cz\k{a}cy analiz\k{e} OCR,
+median\k{e} temporaln\k{a}, przep\l{}yw optyczny, artefakty FFT
+oraz metadane C2PA --- osika powtarzalne wyniki na~czterech r\'{o}\.{z}nych
+kategoriach testowych. Dla~film\'{o}w AI bez modyfikacji detektor osi\k{a}gn\k{a}\l{}
+recall~$0{,}837$, a~po~przyci\k{e}ciu kadr\'{o}w recall wzr\'{o}s\l{} do~$0{,}923$,
+co~\'{s}wiadczy o~odporno\'{s}ci sygna\l{}u przeplywo-optycznego na~proste operacje
+edycyjne. Wska\'{z}nik fa\l{}szywych alarm\'{o}w wyni\'{o}s\l{}
+$\mathrm{FPR} = 0{,}119$ dla~materia\l{}\'{o}w broadcastowych zawieraj\k{a}cych
+animowane nak\l{}adki dolnej trzeciej --- poni\.{z}ej wyznaczonego
+progu $1/7 \approx 0{,}143$. Precyzja r\'{o}wna~$1{,}000$ we~wszystkich
+kategoriach pozytywnych oznacza brak jakichkolwiek fa\l{}szywych pozytyw\'{o}w
+poza dedykowan\k{a} kategori\k{a} broadcastow\k{a}.
 
-\section{Kierunki dalszych badań}
+W~kontra\'{s}cie do~tych wynik\'{o}w, popularne narz\k{e}dzie
+DetectVideo.ai~zwraca\l{}o wynik~55\% (\textit{inconclusive}) dla~ponad~80\%
+testowanych materia\l{}\'{o}w, w~tym dla~nagra\'{n} autentycznych, co~czyni
+je praktycznie bezuzytecznym do~binarnej klasyfikacji tre\'{s}ci.
+Proponowane podej\'{s}cie wycofuje si\k{e} od~tego modelu:
+zamiast wska\'{z}nika procentowego podejmuje jednoznaczn\k{a} decyzj\k{e}
+binarn\k{a} i~dostarcza artefakty diagnostyczne umo\.{z}liwiaj\k{a}ce
+weryfikacj\k{e} ka\.{z}dego wykrycia.
 
-Niniejsza praca stanowi punkt wyjścia do szeroko zakrojonych badań w obszarze
-detekcji multimediów generowanych przez AI. Poniżej przedstawiono kierunki,
-które zdaniem autora posiadają największy potencjał naukowy i praktyczny.
+Istotnym wk\l{}adem implementacyjnym jest mechanizm TC Conditional Boost,
+kt\'{o}ry podnosi recall film\'{o}w granicznych bez~podnoszenia FPR,
+wykorzystuj\k{a}c jednoczesn\k{a} ocen\k{e} stylistyczn\k{a} AI
+oraz zabezpieczenie przed~charakterystycznym sygnaturem nak\l{}adek newsowych.
+
+\section{Kierunki dalszych bada\'{n}}
+
+Niniejsza praca stanowi punkt wyj\'{s}cia do~szeroko zakrojonych bada\'{n}
+w~obszarze detekcji multimedi\'{o}w generowanych przez~AI.
+Poni\.{z}ej przedstawiono kierunki, kt\'{o}re zdaniem autora posiadaj\k{a}
+najwi\k{e}kszy potencja\l{} naukowy i~praktyczny.
 
 \subsection{Rozszerzenie zbioru danych testowych}
 
-Podstawowym ograniczeniem przeprowadzonych eksperymentów jest stosunkowo niewielki
-zbiór 24 plików wideo. Dalsze badania powinny obejmować:
+Podstawowym ograniczeniem przeprowadzonych eksperyment\'{o}w
+jest zbi\'{o}r 137~plik\'{o}w wideo, w~kt\'{o}rym kategoria negatywna
+sk\l{}ada si\k{e} wy\l{}\k{a}cznie z~materia\l{}\'{o}w broadcastowych.
+Dalsze badania powinny obejmowa\'{c}:
 
 \begin{itemize}
-  \item \textbf{Większe zbiory darmowe} --- takie jak FaceForensics++~\cite{Rossler2019FaceForensics},
-        DFDC (Deepfake Detection Challenge Dataset) czy WildDeepfake, liczące dziesiątki
-        tysięcy klipów z różnymi technikami syntezy;
-  \item \textbf{Płatne bazy danych} --- komercyjne zbiory, np.\ oferowane przez Veritone
-        lub Nielsen, zawierające materiały z kontrolowanymi metadanymi produkcji,
-        co umożliwia precyzyjną weryfikację etykiet;
-  \item \textbf{Materiały z platform społecznościowych} --- filmy pobrane z TikToka,
-        YouTube Shorts i Instagrama, które przeszły przez agresywną rekompresję
-        transkodowania platformy, stanowiącą jedno z najtrudniejszych wyzwań
-        dla detektorów sygnałowych;
-  \item \textbf{Zróżnicowanie modeli generatywnych} --- włączenie materiałów z nowszych
-        modeli (Sora 2, Runway Gen-5, Kling, Pika 2.0) w miarę ich dostępności,
-        aby śledzić ewolucję artefaktów.
+  \item \textbf{Wi\k{e}ksze zbiory darmowe} --- takie jak FaceForensics++~\cite{Rossler2019FaceForensics},
+        DFDC (Deepfake Detection Challenge Dataset) czy WildDeepfake, licz\k{a}ce dziesi\k{a}tki
+        tysi\k{e}cy klip\'{o}w z~r\'{o}\.{z}nymi technikami syntezy;
+  \item \textbf{P\l{}atne bazy danych} --- komercyjne zbiory, np.\ oferowane przez Veritone
+        lub Nielsen, zawieraj\k{a}ce materia\l{}y z~kontrolowanymi metadanymi produkcji,
+        co~umo\.{z}liwia precyzyjn\k{a} weryfikacj\k{e} etykiet;
+  \item \textbf{Materia\l{}y z~platform spo\l{}eczno\'{s}ciowych} --- filmy pobrane z~TikToka,
+        YouTube Shorts i~Instagrama, kt\'{o}re przesz\l{}y przez agresywn\k{a} rekompresj\k{e}
+        transkodowania platformy, stanowi\k{a}c\k{a} jedno z~najtrudniejszych wyzwa\'{n}
+        dla~detektor\'{o}w sygna\l{}owych;
+  \item \textbf{Zr\'{o}\.{z}nicowanie modeli generatywnych} --- w\l{}\k{a}czenie materia\l{}\'{o}w
+        z~nowszych modeli (Sora~2, Runway Gen-5, Kling, Pika~2.0) w~miar\k{e}
+        ich dost\k{e}pno\'{s}ci, aby \'{s}ledzi\'{c} ewolucj\k{e} artefakt\'{o}w.
 \end{itemize}
 
-\subsection{Ewaluacja płatnych narzędzi komercyjnych}
+\subsection{Ewaluacja p\l{}atnych narz\k{e}dzi komercyjnych}
 
-W ramach niniejszej pracy przetestowano wyłącznie narzędzia dostępne bezpłatnie.
-Pełna analiza porównawcza powinna objąć płatne rozwiązania klasy enterprise, takie jak:
-SynthID Detector (Google DeepMind), Hive Moderation, Reality Defender oraz Intel
-FakeCatcher. Szczególnie interesujące byłoby zbadanie, czy wyższy koszt subskrypcji
-przekłada się na rzeczywistą poprawę czułości w stosunku do proponowanego
-podejścia wielosygnałowego.
+W~ramach niniejszej pracy przetestowano wy\l{}\k{a}cznie narz\k{e}dzia dost\k{e}pne bezp\l{}atnie.
+Pe\l{}na analiza por\'{o}wnawcza powinna obj\k{a}\'{c} p\l{}atne rozwi\k{a}zania klasy enterprise,
+takie jak: SynthID Detector (Google DeepMind), Hive Moderation, Reality Defender
+oraz Intel FakeCatcher. Szczeg\'{o}lnie interesuj\k{a}ce by\l{}oby zbadanie,
+czy wy\.{z}szy koszt subskrypcji przek\l{}ada si\k{e} na~rzeczywist\k{a} popraw\k{e}
+czu\l{}o\'{s}ci w~stosunku do~proponowanego podej\'{s}cia wielosygna\l{}owego.
 
-\subsection{Odporność na ataki adwersarialne}
+\subsection{Odporno\'{s}\'{c} na~ataki adwersarialne}
 
-Praktyczny detektor musi być odporny na celowe działania twórców deepfake'ów.
+Praktyczny detektor musi by\'{c} odporny na~celowe dzia\l{}ania tw\'{o}rc\'{o}w deepfake'\'{o}w.
 Kierunkiem wartym zbadania jest testowanie detektora wobec technik adversarial,
-takich jak dodawanie szumu gaussowskiego przed publikacją, kompresja
-H.265 z niskim bitrate oraz preprocessing przez filtry stylistyczne
+takich jak dodawanie szumu gaussowskiego przed~publikacj\k{a}, kompresja
+H.265 z~niskim bitrate oraz preprocessing przez filtry stylistyczne
 (np.\ efekt ,,film grain'').
-Badania w tym obszarze pozwolą na identyfikację najsłabszych ogniw proponowanego
-potoku i ukierunkowanie dalszych prac na ich wzmocnienie.
+Badania w~tym obszarze pozwol\k{a} na~identyfikacj\k{e} najslabszych ogniw
+proponowanego potoku i~ukierunkowanie dalszych prac na~ich wzmocnienie.
 
 \subsection{Metody uczenia maszynowego}
 
-Obecna implementacja opiera się na metodach sygnałowych opartych na
-regułach heurystycznych. Naturalnym kierunkiem rozwoju jest zastąpienie
-lub uzupełnienie modułu decyzyjnego klasyfikatorem uczonym nadzorowanym ---
-np.\ lekką siecią CNN na cechach spektralnych lub modelem XGBoost
-na wektorze cech numerycznych --- co potencjalnie zwiększy zdolność generalizacji
-na nowych modelach generatywnych bez konieczności ręcznej aktualizacji progów.
+Obecna implementacja opiera si\k{e} na~metodach sygna\l{}owych opartych na~regu\l{}ach
+heurystycznych. Naturalnym kierunkiem rozwoju jest zast\k{a}pienie lub uzupe\l{}nienie
+modu\l{}u decyzyjnego klasyfikatorem uczonym nadzorowanym ---
+np.\ lekk\k{a} sieci\k{a} CNN na~cechach spektralnych lub modelem XGBoost
+na~wektorze cech numerycznych --- co~potencjalnie zwi\k{e}kszy zdolno\'{s}\'{c}
+generalizacji na~nowych modelach generatywnych bez~konieczno\'{s}ci r\k{e}cznej
+aktualizacji prog\'{o}w.
 
-\subsection{Detekcja w czasie rzeczywistym i integracja z platformami}
+\subsection{Detekcja w~czasie rzeczywistym i~integracja z~platformami}
 
 Obecna architektura przetwarza pliki wsadowo. Kolejnym krokiem praktycznym
-byłoby opracowanie wersji strumieniowej zdolnej do analizy wideo na żywo
-(np.\ podczas transmisji na platformach streamingowych) lub wdrożonej jako
-wtyczka do CMS redakcyjnych, co odpowiada na rosnące zapotrzebowanie
-branży mediowej na narzędzia weryfikacji treści w czasie rzeczywistym.
+by\l{}oby opracowanie wersji strumieniowej zdolnej do~analizy wideo na~\.{z}ywo
+(np.\ podczas transmisji na~platformach streamingowych) lub wdro\.{z}onej jako
+wtyczka do~CMS redakcyjnych, co~odpowiada na~rosn\k{a}ce zapotrzebowanie
+bran\.{z}y mediowej na~narz\k{e}dzia weryfikacji tre\'{s}ci w~czasie rzeczywistym.
 
 \subsection{Cyfrowe znaki wodne jako proaktywna ochrona}
 
-Obok reaktywnej detekcji warto rozwinąć badania nad proaktywnym
-oznaczaniem treści AI na poziomie modelu generatywnego (C2PA,
-SynthID). Analiza skuteczności przetrwania tych znaków po typowych
-operacjach edycyjnych (przycięcie, zmiana rozdzielczości, transkodowanie)
-stanowi otwarty problem badawczy z bezpośrednim przełożeniem na regulacje prawne UE
-dotyczące oznaczania treści syntetycznych~\cite{EUAIAct2024}.
+Obok reaktywnej detekcji warto rozwin\k{a}\'{c} badania nad~proaktywnym
+oznaczaniem tre\'{s}ci AI na~poziomie modelu generatywnego (C2PA, SynthID).
+Analiza skuteczno\'{s}ci przetrwania tych znak\'{o}w po~typowych operacjach edycyjnych
+(przyci\k{e}cie, zmiana rozdzielczo\'{s}ci, transkodowanie) stanowi otwarty
+problem badawczy z~bezpo\'{s}rednim prze\l{}o\.{z}eniem na~regulacje prawne~UE
+dotycz\k{a}ce oznaczania tre\'{s}ci syntetycznych~\cite{EUAIAct2024}.
