@@ -307,6 +307,8 @@ class GripSplitter(QSplitter):
 class ClampedHeader(QHeaderView):
     """
     QHeaderView z twardym ograniczeniem sumy szerokości kolumn do viewportu.
+    Kolumny można swobodnie przesuwać między sobą, ale łączna szerokość
+    nigdy nie przekroczy szerokości widocznego obszaru tabeli.
     """
 
     def __init__(self, orientation, min_widths: list[int], parent=None):
@@ -343,6 +345,7 @@ class ClampedHeader(QHeaderView):
             return
         squeeze_col = self._next_visible(col)
         if squeeze_col == -1:
+            # Ostatnia kolumna — nie pozwól przekroczyć viewportu
             if delta > 0:
                 self._guard = True
                 try:
@@ -370,6 +373,7 @@ class ClampedHeader(QHeaderView):
                 self._guard = False
 
     def _rebalance(self) -> None:
+        """Dopasowuje ostatnią kolumnę tak, by suma = szerokość viewportu."""
         if self._guard or self.count() == 0:
             return
         vw = self._viewport_w()
@@ -387,6 +391,11 @@ class ClampedHeader(QHeaderView):
             self.resizeSection(last, desired)
         finally:
             self._guard = False
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        """Wymusza rebalans podczas przeciągania, nie tylko po puszczeniu."""
+        super().mouseMoveEvent(event)
+        self._rebalance()
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
@@ -566,16 +575,54 @@ class WatermarkWorker(QtCore.QThread):
 
     def _run_evaluate_pipeline(self, path: str) -> dict:
         """
-        Uruchamia pełny pipeline z evaluate.py:
-        scan_video -> extract_signals -> detect_c2pa_signal -> fuse
-        Zwraca słownik kompatybilny z on_file_finished.
+        Uruchamia pipeline z evaluate.py z parametrami zależnymi od trybu:
+
+        Tryb zwykły  (detailed_scan=False):
+          - n_frames_median=15, check_invisible=False
+          - Szybki skan: OF + ZV + FFT + C2PA. Bez rivaGAN/DWTDCT (~2-4s/film).
+
+        Tryb dwufazowy (detailed_scan=True):
+          - n_frames_median=30, check_invisible=True
+          - Pełny skan: wszystkie sygnały + invisible watermark (rivaGAN/DWTDCT).
+          - Wolniejszy, ale wykrywa subtelne watermarki niewidoczne gołym okiem.
         """
         from pathlib import Path
         vp = Path(path)
-        self.log_line.emit(f"[EVAL] Skanuję sygnały: {vp.name}")
 
-        result, elapsed = scan_video(vp)
-        sig = extract_signals(result)
+        if self._detailed_scan:
+            n_frames  = 30
+            check_iw  = True
+            mode_name = "dwufazowy (pełny)"
+        else:
+            n_frames  = 15
+            check_iw  = False
+            mode_name = "zwykły (szybki)"
+
+        self.log_line.emit(f"[EVAL] Skanuję sygnały [{mode_name}]: {vp.name}")
+
+        import cv2 as _cv2
+        cap = _cv2.VideoCapture(str(vp))
+        if not cap.isOpened():
+            raise RuntimeError(f"Nie można otworzyć: {vp}")
+        fps          = cap.get(_cv2.CAP_PROP_FPS) or 25.0
+        total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
+
+        import time as _time
+        t0 = _time.time()
+
+        from advanced_detectors import run_advanced_scan  # type: ignore
+        result = run_advanced_scan(
+            cap, fps, total_frames,
+            n_frames_median=n_frames,
+            check_invisible=check_iw,
+            check_fft=True,
+            check_optical_flow=True,
+            of_scale=0.5,
+        )
+        elapsed = _time.time() - t0
+        cap.release()
+
+        sig      = extract_signals(result)
         c2pa_sig = detect_c2pa_signal(vp)
 
         det, score, mode, ai_specific, broadcast_trap = fuse(
@@ -845,9 +892,11 @@ class MainWindow(QMainWindow):
 
         self.toggle_detailed = ToggleSwitch("Szczegółowa analiza (Dwufazowa)")
         self.toggle_detailed.setToolTip(
-            "Tryb dwufazowy — po szybkim skanie uruchamia zaawansowane filtry obrazu\n"
-            "(CLAHE, Top-Hat, gamma, odwrócone kolory) na klatkach bez detekcji.\n"
-            "Wolniejszy, ale wykrywa trudne watermarki (np. białe na jasnym tle)."
+            "Tryb zwykły (OFF): szybki skan — OF + ZV + FFT + C2PA.\n"
+            "  n_frames=15, bez invisible watermark. Czas ~2–4s/film.\n\n"
+            "Tryb dwufazowy (ON): pełny skan — wszystkie sygnały + invisible watermark\n"
+            "  (rivaGAN / DWTDCT). n_frames=30. Wykrywa subtelne, niewidoczne watermarki.\n"
+            "  Wolniejszy (~10–30s/film w zależności od GPU)."
         )
         toggle_row = QHBoxLayout()
         toggle_row.addWidget(self.toggle_detailed)
