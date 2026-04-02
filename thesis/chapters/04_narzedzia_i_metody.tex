@@ -1,6 +1,11 @@
 \chapter{Narz\k{e}dzia i~metody detekcji}
 \label{ch:narzedzia}
 
+% Nowy typ kolumny z zawijaniem tekstu i RaggedRight -- definiowany lokalnie
+% (jesli juz zdefiniowany w preambule, usun ponizszy wiersz)
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+
+% ===================================================================
 \section{Zbi\'{o}r danych testowych}
 \label{sec:zbior_danych}
 
@@ -11,49 +16,50 @@ materia\l{}y zmanipulowane (deepfake), autentyczne nagrania kamerowe
 oraz materia\l{}y kontrolne.
 Tabela~\ref{tab:dataset} prezentuje sk\l{}ad zbioru wed\l{}ug kategorii.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
+{\setlength{\tabcolsep}{8pt}\renewcommand{\arraystretch}{1.3}
 \caption{Sk\l{}ad zbioru testowego wed\l{}ug kategorii}
 \label{tab:dataset}
 \small
-\begin{tabular}{|l|c|l|}
-\hline
-\textbf{Kategoria} & \textbf{Liczba} & \textbf{\'{Z}r\'{o}d\l{}o / Model} \\
-\hline
-Syntetyczne -- Runway Gen-3 & 11 & Runway Gen-3 \\
-Syntetyczne -- Runway Gen-4 Turbo & 5 & Runway Gen-4 Turbo \\
-Syntetyczne -- Runway Gen-4.5 & 2 & Runway Gen-4.5 \\
-Syntetyczne -- OpenAI Sora & 5 & OpenAI Sora \\
-Syntetyczne -- Luma Dream Machine & 3 & Luma Dream Machine \\
-Syntetyczne -- Kling AI & 6 & Kling AI \\
-Syntetyczne -- Pika Labs & 2 & Pika Labs \\
-Syntetyczne -- Grok (xAI) & 3 & Grok \\
-Syntetyczne -- inne modele AI & 4 & r\'{o}\.{z}ne \\
-\hline
-\textit{Razem syntetyczne} & \textit{41} & \\
-\hline
-Autentyczne (klasa negatywna) & 3 & nagrania kamerowe \\
-Materia\l{}y kontrolne (corner cases) & 7 & reklamy, recenzje aplikacji \\
-\hline
-\textbf{Razem} & \textbf{51} & \\
-\hline
-\end{tabular}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Kategoria} & \textbf{Liczba} & \textbf{\'{Z}r\'{o}d\l{}o~/~Model} \\
+\midrule
+Syntetyczne --- Runway Gen-3       & 11 & Runway Gen-3 \\
+Syntetyczne --- Runway Gen-4 Turbo &  5 & Runway Gen-4 Turbo \\
+Syntetyczne --- Runway Gen-4.5     &  2 & Runway Gen-4.5 \\
+Syntetyczne --- OpenAI Sora        &  5 & OpenAI Sora \\
+Syntetyczne --- Luma Dream Machine &  3 & Luma Dream Machine \\
+Syntetyczne --- Kling AI           &  6 & Kling AI \\
+Syntetyczne --- Pika Labs          &  2 & Pika Labs \\
+Syntetyczne --- Grok (xAI)         &  3 & Grok \\
+Syntetyczne --- inne modele AI     &  4 & r\'{o}\.{z}ne \\
+\midrule
+\textit{Razem syntetyczne}         & \textit{41} & \\
+\midrule
+Autentyczne (klasa negatywna)          &  3 & nagrania kamerowe \\
+Materia\l{}y kontrolne (corner cases)  &  7 & reklamy, recenzje aplikacji \\
+\midrule
+\textbf{Razem}                         & \textbf{51} & \\
+\bottomrule
+\end{tabular}}
 \end{table}
 
-R\'{o}\.{z}norodno\'{s}\'{c} modeli generatywnych (9 r\'{o}\.{z}nych system\'{o}w) oraz
-zr\'{o}\.{z}nicowanie styl\'{o}w wizualnych~--- od~realistycznych scen ulicznych
-po~abstrakcyjne animacje~--- pozwala na~rzeteln\k{a} ocen\k{e} skuteczno\'{s}ci
+R\'{o}\.{z}norodno\'{s}\'{c} modeli generatywnych (9~r\'{o}\.{z}nych system\'{o}w) oraz
+zr\'{o}\.{z}nicowanie styl\'{o}w wizualnych --- od~realistycznych scen ulicznych
+po~abstrakcyjne animacje --- pozwala na~rzeteln\k{a} ocen\k{e} skuteczno\'{s}ci
 narz\k{e}dzi detekcji.
 
 \textbf{Corner cases.}
 Siedem materia\l{}\'{o}w z~kategorii kontrolnej po~r\k{e}cznej weryfikacji
-okaza\l{}o si\k{e} nagraniami \emph{screen capture} interfejs\'{o}w
-lub recenzjami aplikacji~--- nie s\k{a} to filmy wygenerowane przez AI
+okaza\l{}o si\k{e} nagraniami \emph{screen~capture} interfejs\'{o}w
+lub recenzjami aplikacji --- nie s\k{a} to filmy wygenerowane przez AI
 w~\'{s}cis\l{}ym sensie. Zosta\l{}y one wykluczone z~g\l{}\'{o}wnej ewaluacji
 metryk klasyfikacji, lecz pozostaj\k{a} w~zbiorze jako przyk\l{}ady
 trudnych przypadk\'{o}w.
 
-% -------------------------------------------------------------------
+% ===================================================================
 \section{Przegl\k{a}d istniej\k{a}cych narz\k{e}dzi internetowych}
 \label{sec:przeglad_narzedzi}
 
@@ -78,26 +84,27 @@ Przeprowadzono test na~podzbiorze 24~plik\'{o}w obejmuj\k{a}cym
 materia\l{}y syntetyczne, zmanipulowane i~autentyczne.
 Tabela~\ref{tab:detectvideo_summary} pokazuje rozk\l{}ad wynik\'{o}w.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
+{\setlength{\tabcolsep}{8pt}\renewcommand{\arraystretch}{1.3}
 \caption{Rozk\l{}ad wynik\'{o}w DetectVideo.ai ($N=24$)}
 \label{tab:detectvideo_summary}
 \small
-\begin{tabular}{|l|c|l|}
-\hline
+\begin{tabular}{lcc}
+\toprule
 \textbf{Wynik AI likelihood} & \textbf{Liczba} & \textbf{Typy materia\l{}\'{o}w} \\
-\hline
+\midrule
 55\% (nierozstrzygni\k{e}ty) & 20 & syntetyczne, autentyczne, deepfake \\
-72\% (podejrzany) & 4 & abstrakcja, fantasy, zmanip.\ dokument \\
-\hline
+72\% (podejrzany)            &  4 & abstrakcja, fantasy, zmanip.\ dokument \\
+\midrule
 \textbf{Razem} & \textbf{24} & \\
-\hline
-\end{tabular}
+\bottomrule
+\end{tabular}}
 \end{table}
 
 \subsubsection{Analiza wynik\'{o}w}
 
-Serwis DetectVideo.ai zwr\'{o}ci\l{} wynik \textbf{55\%} dla \textbf{20 z~24~plik\'{o}w}
+Serwis DetectVideo.ai zwr\'{o}ci\l{} wynik \textbf{55\%} dla \textbf{20~z~24~plik\'{o}w}
 (83\%), w~tym dla autentycznych nagra\'{n} kamerowych.
 Wynik 55\% stanowi de~facto domy\'{s}ln\k{a} odpowied\'{z} ,,nie wiem'' ---
 nie jest to faktyczna ocena zawarto\'{s}ci wizualnej.
@@ -106,10 +113,10 @@ cechami generatywnymi (abstrakcja, fantasy) oraz zmanipulowany
 dokument, co wskazuje na~dzia\l{}anie oparte g\l{}\'{o}wnie na~analizie
 metadanych, a~nie tre\'{s}ci wizualnej.
 
-% \begin{figure}[H]
+% \begin{figure}[htbp]
 %   \centering
 %   \includegraphics[width=0.85\textwidth]{figures/detectvideo_screenshot.png}
-%   \caption{Interfejs DetectVideo.ai -- przyk\l{}adowy wynik (72\% AI likelihood)}
+%   \caption{Interfejs DetectVideo.ai --- przyk\l{}adowy wynik (72\% AI likelihood)}
 %   \label{fig:detectvideo_screenshot}
 % \end{figure}
 
@@ -118,40 +125,41 @@ metadanych, a~nie tre\'{s}ci wizualnej.
 \label{sec:undetectable}
 
 Undetectable.ai to serwis internetowy oferuj\k{a}cy analiz\k{e} wielokana\l{}ow\k{a}:
-kana\l{} obrazu (\textit{Image score}) oraz kana\l{} ruchu (\textit{Motion score}).
+kana\l{} obrazu (\emph{Image score}) oraz kana\l{} ruchu (\emph{Motion score}).
 Ko\'{n}cowy wynik podawany jest w~skali 0--100.
 Serwis wyodr\k{e}bnia cztery etykiety jako\'{s}ciowe:
-\textit{Strong authentic} (0--20),
-\textit{Mostly authentic} (21--49),
-\textit{Likely AI elements} (61--79)
-i~\textit{Likely AI-Generated} (80--100).
+\emph{Strong authentic} (0--20),
+\emph{Mostly authentic} (21--49),
+\emph{Likely AI elements} (61--79)
+i~\emph{Likely AI-Generated} (80--100).
 
 \subsubsection{Wyniki na~pe\l{}nym zbiorze testowym}
 
-Przeprowadzono testy na~46~plikach (2 odrzucone przez moderacj\k{e} systemu).
+Przeprowadzono testy na~46~plikach (2~odrzucone przez moderacj\k{e} systemu).
 Tabela~\ref{tab:undetectable_summary} przedstawia rozk\l{}ad etykiet
 wed\l{}ug kategorii materia\l{}u.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
+{\setlength{\tabcolsep}{7pt}\renewcommand{\arraystretch}{1.3}
 \caption{Rozk\l{}ad wynik\'{o}w Undetectable.ai wed\l{}ug kategorii ($N=46$)}
 \label{tab:undetectable_summary}
 \small
-\begin{tabular}{|l|c|c|c|c|}
-\hline
+\begin{tabular}{lcccc}
+\toprule
 \textbf{Kategoria} &
 \textbf{AI-Gen.} &
 \textbf{AI elem.} &
 \textbf{Mostly auth.} &
 \textbf{Strong auth.} \\
-\hline
-Syntetyczne (38) & 30 & 3 & 4 & 1 \\
-Kontrola / corner cases (7) & 1 & 0 & 1 & 5 \\
-Autentyczne (1) & 0 & 0 & 0 & 1 \\
-\hline
+\midrule
+Syntetyczne (38)              & 30 & 3 & 4 & 1 \\
+Kontrola / corner cases (7)   &  1 & 0 & 1 & 5 \\
+Autentyczne (1)               &  0 & 0 & 0 & 1 \\
+\midrule
 \textbf{Razem (46)} & \textbf{31} & \textbf{3} & \textbf{5} & \textbf{7} \\
-\hline
-\end{tabular}
+\bottomrule
+\end{tabular}}
 \end{table}
 
 \subsubsection{Analiza wynik\'{o}w}
@@ -177,7 +185,7 @@ Zidentyfikowano cztery kategorie trudnych przypadk\'{o}w:
         wynik ko\'{n}cowy bywa niedoszacowany.
   \item \textbf{Screen-capture i~recenzje} ---
         serwis poprawnie klasyfikuje je jako niesyntetyczne
-        (Strong authentic), potwierdzaj\k{a}c ich status corner case.
+        (\emph{Strong authentic}), potwierdzaj\k{a}c ich status corner~case.
 \end{itemize}
 
 % -------------------------------------------------------------------
@@ -190,13 +198,13 @@ w~celu wyznaczenia wska\'{z}nika fa\l{}szywych alarm\'{o}w (FPR).
 
 \subsubsection{Wska\'{z}nik fa\l{}szywych alarm\'{o}w}
 
-Serwis b\l{}\k{e}dnie zakwalifikowa\l{} \textbf{7 z~41 plik\'{o}w}
+Serwis b\l{}\k{e}dnie zakwalifikowa\l{} \textbf{7~z~41~plik\'{o}w}
 jako wygenerowane przez AI:
 \[
 \mathrm{FPR} = \frac{7}{41} \approx 17{,}1\%
 \]
 
-Wszystkie 7 fa\l{}szywych alarm\'{o}w dotyczy\l{}o materia\l{}\'{o}w
+Wszystkie 7~fa\l{}szywych alarm\'{o}w dotyczy\l{}o materia\l{}\'{o}w
 z~\textbf{animowanymi elementami graficznymi} --- lower thirds,
 naklejki AR lub renderowane reklamy 3D na\l{}o\.{z}one na~obraz kamerowy.
 Uzyska\l{}y one wyniki w~zakresie 50--91, co sugeruje,
@@ -216,22 +224,23 @@ opartych na~analizie statystycznej obrazu.
 Tabela~\ref{tab:metryki_ogolne} przedstawia por\'{o}wnanie metryk
 klasyfikacji dla w\l{}asnego detektora i~serwisu AIVideoDetector.com.
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
-\caption{Por\'{o}wnanie metryk klasyfikacji -- $N=79$}
+{\setlength{\tabcolsep}{10pt}\renewcommand{\arraystretch}{1.3}
+\caption{Por\'{o}wnanie metryk klasyfikacji --- $N=79$}
 \label{tab:metryki_ogolne}
 \small
-\begin{tabular}{|l|c|c|}
-\hline
+\begin{tabular}{lcc}
+\toprule
 \textbf{Metryka} & \textbf{Nasz system} & \textbf{AIVideoDetector} \\
-\hline
-Accuracy & 78{,}9\% & 79{,}7\% \\
+\midrule
+Accuracy  & 78{,}9\% & 79{,}7\% \\
 Precision & \textbf{82{,}9\%} & 80{,}6\% \\
-Recall & 74{,}4\% & 76{,}3\% \\
-F1 & 78{,}4\% & 78{,}4\% \\
-FPR & \textbf{16{,}2\%} & 17{,}1\% \\
-\hline
-\end{tabular}
+Recall    & 74{,}4\% & 76{,}3\% \\
+F1        & 78{,}4\% & 78{,}4\% \\
+FPR       & \textbf{16{,}2\%} & 17{,}1\% \\
+\bottomrule
+\end{tabular}}
 \end{table}
 
 Wyniki obu system\'{o}w s\k{a} praktycznie identyczne ---
@@ -240,71 +249,72 @@ Proponowany detektor przewy\.{z}sza AIVideoDetector.com
 pod wzgl\k{e}dem Precision i~FPR, natomiast AIVideoDetector.com
 uzyskuje nieznacznie wy\.{z}sz\k{a} Accuracy i~Recall.
 
-% -------------------------------------------------------------------
+% ===================================================================
 \section{Por\'{o}wnanie narz\k{e}dzi}
 \label{sec:porownanie}
 
 \subsection{Zestawienie komercyjnych serwis\'{o}w internetowych}
 \label{sec:zalety_wady_internet}
 
-\begin{table}[H]
+\begin{table}[htbp]
 \centering
+{\setlength{\tabcolsep}{6pt}\renewcommand{\arraystretch}{1.35}
 \caption{Por\'{o}wnanie komercyjnych narz\k{e}dzi detekcji wideo AI}
 \label{tab:porownanie_narzedzi}
 \small
-\begin{tabular}{|p{2.6cm}|p{5.6cm}|p{5.6cm}|}
-\hline
+\begin{tabular}{L{3.0cm}L{5.2cm}L{5.2cm}}
+\toprule
 \textbf{Narz\k{e}dzie} & \textbf{Zalety} & \textbf{Wady} \\
-\hline
+\midrule
 DetectVideo.ai &
 Prosty interfejs; bez rejestracji &
 83\% wynik\'{o}w nierozstrzygni\k{e}te (55\%);
 brak realnej analizy wizualnej;
 brak XAI \\
-\hline
+\addlinespace[4pt]
 Undetectable.ai &
 Analiza wielokana\l{}owa (Image~+~Motion);
 czytelna skala 0--100;
-skuteczny dla modeli Gen-3 &
+F1 wysoki dla modeli Gen-3 i~Gen-4 &
 B\l{}\k{e}dy na~fotorealistycznych i~statycznych scenach;
-limit dzienny; odrzucanie plik\'{o}w \\
-\hline
+limit dzienny; odrzucanie plik\'{o}w przez moderacj\k{e} \\
+\addlinespace[4pt]
 AIVideoDetector.com &
 Skuteczno\'{s}\'{c} F1\,=\,78{,}4\%;
 przejrzysty wynik liczbowy &
-FPR\,=\,17{,}1\% -- fa\l{}szywe alarmy
-dla materia\l{}\'{o}w z~animowanymi naklejkami \\
-\hline
-\end{tabular}
+FPR\,=\,17{,}1\% --- fa\l{}szywe alarmy
+dla materia\l{}\'{o}w z~animowanymi elementami broadcastowymi \\
+\bottomrule
+\end{tabular}}
 \end{table}
 
 \subsection{Zalety i~wady proponowanego detektora}
 \label{sec:zalety_wady_wlasny}
 
 Proponowane podej\'{s}cie opiera si\k{e} na~fuzji wielokana\l{}owej:
-analiza spektralna (FFT), przep\l{}yw optyczny i~metadane.
+analiza spektralna (FFT), przep\l{}yw optyczny i~metadane C2PA.
 
 \textbf{Zalety:}
 \begin{itemize}
-  \item \textbf{Decyzja binarna} --- jednoznaczna klasyfikacja AI~/~nie~AI
+  \item \textbf{Decyzja binarna} --- jednoznaczna klasyfikacja AI~/~nie-AI
         bez wynik\'{o}w nierozstrzygni\k{e}tych.
   \item \textbf{Wielosygna\l{}owo\'{s}\'{c}} --- po\l{}\k{a}czenie FFT,
-        optical flow i~metadanych zwi\k{e}ksza odporno\'{s}\'{c}
+        optical flow i~metadanych C2PA zwi\k{e}ksza odporno\'{s}\'{c}
         na~manipulacje pojedynczym kana\l{}em.
   \item \textbf{Interpretowalny wynik (XAI)} --- wagi sk\l{}adowych
         sygna\l{}\'{o}w umo\.{z}liwiaj\k{a} analiz\k{e} przyczynow\k{a} decyzji.
   \item \textbf{Praca lokalna} --- przetwarzanie bez wysy\l{}ania danych
-        do~chmury.
+        do~chmury; dane wra\.{z}liwe nie opuszczaj\k{a} urz\k{a}dzenia.
   \item \textbf{Konkurencyjna skuteczno\'{s}\'{c}} --- F1\,=\,78{,}4\%,
-        Precision 82{,}9\%, FPR 16{,}2\%.
+        Precision\,=\,82{,}9\%, FPR\,=\,16{,}2\%.
 \end{itemize}
 
 \textbf{Wady i~ograniczenia:}
 \begin{itemize}
   \item \textbf{Czu\l{}o\'{s}\'{c} na~kompresj\k{e}} --- silna kompresja
-        H.264/H.265 wyt\l{}umia sygna\l{}y spektralne.
+        H.264/H.265 wyt\l{}umia sygna\l{}y spektralne FFT.
   \item \textbf{Kr\'{o}tkie klipy} --- materia\l{}y poni\.{z}ej 5~sekund
-        dostarczaj\k{a} niewystarczaj\k{a}cej liczby klatek.
+        dostarczaj\k{a} niewystarczaj\k{a}cej liczby klatek do~analizy.
   \item \textbf{Blind spot: lower thirds i~AR} ---
         FPR\,=\,16{,}2\% dla materia\l{}\'{o}w
         z~animowanymi naklejkami broadcastowymi.

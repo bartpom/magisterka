@@ -19,17 +19,42 @@ from PyQt6.QtWidgets import (
 
 import config
 
+# Integracja z evaluate.py — logika fuzji sygnałów (główny pipeline)
 try:
-    import ocr_detector  # type: ignore[import]
-except Exception as _e:
-    ocr_detector = None  # type: ignore[assignment]
-    print(f"[OCR] Moduł ocr_detector niedostępny: {_e}")
+    import sys as _sys
+    import os as _os
+    _eval_dir = _os.path.join(_os.path.dirname(__file__), "dataset")
+    if _eval_dir not in _sys.path:
+        _sys.path.insert(0, _eval_dir)
+    from evaluate import scan_video, extract_signals, fuse, detect_c2pa_signal  # type: ignore[import]
+    EVALUATE_AVAILABLE = True
+    print("[EVAL] Moduł evaluate.py załadowany — używam pipeline fuzji sygnałów.")
+except Exception as _ee:
+    EVALUATE_AVAILABLE = False
+    scan_video = None  # type: ignore[assignment]
+    extract_signals = None  # type: ignore[assignment]
+    fuse = None  # type: ignore[assignment]
+    detect_c2pa_signal = None  # type: ignore[assignment]
+    print(f"[EVAL] Moduł evaluate.py niedostępny ({_ee}) — fallback do ocr_detector.")
 
-try:
-    import c2pa_detector  # type: ignore[import]
-except Exception as _e2:
-    c2pa_detector = None  # type: ignore[assignment]
-    print(f"[C2PA] Moduł c2pa_detector niedostępny: {_e2}")
+# ocr_detector i c2pa_detector importowane leniwie — tylko gdy evaluate.py niedostępny.
+# Nie importujemy ich na poziomie modułu, żeby uniknąć zbędnej inicjalizacji OCR
+# (EasyOCR/PaddleOCR zajmuje kilka sekund i zaśmieca logi gdy nie jest potrzebny).
+ocr_detector = None
+c2pa_detector = None
+
+if not EVALUATE_AVAILABLE:
+    try:
+        import ocr_detector as _ocr_mod  # type: ignore[import]
+        ocr_detector = _ocr_mod
+    except Exception as _e:
+        print(f"[OCR] Moduł ocr_detector niedostępny: {_e}")
+
+    try:
+        import c2pa_detector as _c2pa_mod  # type: ignore[import]
+        c2pa_detector = _c2pa_mod
+    except Exception as _e2:
+        print(f"[C2PA] Moduł c2pa_detector niedostępny: {_e2}")
 
 SUPPORTED_EXTS = {
     ".mp4", ".mov", ".avi", ".mkv", ".webm",
@@ -43,7 +68,7 @@ COL_PCT    = 3
 COL_C2PA   = 4
 COL_CSV    = 5
 
-# Minimalne szerokosci kolumn — kolumna CSV nigdy nie moze zniknac
+# Minimalne szerokości kolumn — twarde dno, poniżej którego nie można zeskalować
 _COL_MIN_WIDTHS = [80, 45, 90, 100, 50, 80]
 
 _SETTINGS_ORG  = "WatermarkDetector"
@@ -277,6 +302,110 @@ class GripSplitter(QSplitter):
         return super().createHandle()
 
 
+# ======================== ClampedHeader ========================
+
+class ClampedHeader(QHeaderView):
+    """
+    QHeaderView z twardym ograniczeniem sumy szerokości kolumn do viewportu.
+    Kolumny można swobodnie przesuwać między sobą, ale łączna szerokość
+    nigdy nie przekroczy szerokości widocznego obszaru tabeli.
+    """
+
+    def __init__(self, orientation, min_widths: list[int], parent=None):
+        super().__init__(orientation, parent)
+        self._min_w = min_widths
+        self._guard = False
+        self.setSectionsMovable(False)
+        self.setSectionsClickable(True)
+        self.setHighlightSections(True)
+        self.sectionResized.connect(self._on_section_resized)
+
+    def _viewport_w(self) -> int:
+        p = self.parentWidget()
+        if p is not None and hasattr(p, "viewport"):
+            return p.viewport().width()
+        return self.width()
+
+    def _min(self, col: int) -> int:
+        return self._min_w[col] if col < len(self._min_w) else 40
+
+    def _next_visible(self, after: int) -> int:
+        i = after + 1
+        while i < self.count():
+            if not self.isSectionHidden(i):
+                return i
+            i += 1
+        return -1
+
+    def _on_section_resized(self, col: int, old_size: int, new_size: int) -> None:
+        if self._guard or self.count() == 0:
+            return
+        delta = new_size - old_size
+        if delta == 0:
+            return
+        squeeze_col = self._next_visible(col)
+        if squeeze_col == -1:
+            # Ostatnia kolumna — nie pozwól przekroczyć viewportu
+            if delta > 0:
+                self._guard = True
+                try:
+                    self.resizeSection(col, old_size)
+                finally:
+                    self._guard = False
+            return
+        sq_current = self.sectionSize(squeeze_col)
+        sq_min = self._min(squeeze_col)
+        available_squeeze = sq_current - sq_min
+        if delta > 0:
+            actual_squeeze = min(delta, available_squeeze)
+            allowed_delta = actual_squeeze
+            self._guard = True
+            try:
+                self.resizeSection(col, old_size + allowed_delta)
+                self.resizeSection(squeeze_col, max(sq_min, sq_current - allowed_delta))
+            finally:
+                self._guard = False
+        else:
+            self._guard = True
+            try:
+                self.resizeSection(squeeze_col, sq_current - delta)
+            finally:
+                self._guard = False
+
+    def _rebalance(self) -> None:
+        """Dopasowuje ostatnią kolumnę tak, by suma = szerokość viewportu."""
+        if self._guard or self.count() == 0:
+            return
+        vw = self._viewport_w()
+        if vw <= 0:
+            return
+        last = self.count() - 1
+        while last > 0 and self.isSectionHidden(last):
+            last -= 1
+        other_sum = sum(self.sectionSize(i) for i in range(last))
+        desired = max(self._min(last), vw - other_sum)
+        if desired == self.sectionSize(last):
+            return
+        self._guard = True
+        try:
+            self.resizeSection(last, desired)
+        finally:
+            self._guard = False
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        """Wymusza rebalans podczas przeciągania, nie tylko po puszczeniu."""
+        super().mouseMoveEvent(event)
+        self._rebalance()
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        self._rebalance()
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+        super().resizeEvent(event)
+        QtCore.QTimer.singleShot(0, self._rebalance)
+
+
 # ======================== Drop Overlay ========================
 
 class DropOverlay(QWidget):
@@ -434,7 +563,7 @@ class WatermarkWorker(QtCore.QThread):
     def __init__(self, files, row_offset, confidence, sample_rate, output_dir, detailed_scan, parent=None):
         super().__init__(parent)
         self._files         = list(files)
-        self._row_offset    = row_offset   # indeks pierwszego nowego wiersza w tabeli
+        self._row_offset    = row_offset
         self._confidence    = confidence
         self._sample_rate   = max(1, int(sample_rate)) if sample_rate else 1
         self._output_dir    = output_dir
@@ -444,21 +573,121 @@ class WatermarkWorker(QtCore.QThread):
     def stop(self):
         self._stop = True
 
+    def _run_evaluate_pipeline(self, path: str) -> dict:
+        """
+        Uruchamia pipeline z evaluate.py z parametrami zależnymi od trybu:
+
+        Tryb zwykły  (detailed_scan=False):
+          - n_frames_median=15, check_invisible=False
+          - Szybki skan: OF + ZV + FFT + C2PA. Bez rivaGAN/DWTDCT (~2-4s/film).
+
+        Tryb dwufazowy (detailed_scan=True):
+          - n_frames_median=30, check_invisible=True
+          - Pełny skan: wszystkie sygnały + invisible watermark (rivaGAN/DWTDCT).
+          - Wolniejszy, ale wykrywa subtelne watermarki niewidoczne gołym okiem.
+        """
+        from pathlib import Path
+        vp = Path(path)
+
+        if self._detailed_scan:
+            n_frames  = 30
+            check_iw  = True
+            mode_name = "dwufazowy (pełny)"
+        else:
+            n_frames  = 15
+            check_iw  = False
+            mode_name = "zwykły (szybki)"
+
+        self.log_line.emit(f"[EVAL] Skanuję sygnały [{mode_name}]: {vp.name}")
+
+        import cv2 as _cv2
+        cap = _cv2.VideoCapture(str(vp))
+        if not cap.isOpened():
+            raise RuntimeError(f"Nie można otworzyć: {vp}")
+        fps          = cap.get(_cv2.CAP_PROP_FPS) or 25.0
+        total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
+
+        import time as _time
+        t0 = _time.time()
+
+        from advanced_detectors import run_advanced_scan  # type: ignore
+        result = run_advanced_scan(
+            cap, fps, total_frames,
+            n_frames_median=n_frames,
+            check_invisible=check_iw,
+            check_fft=True,
+            check_optical_flow=True,
+            of_scale=0.5,
+        )
+        elapsed = _time.time() - t0
+        cap.release()
+
+        sig      = extract_signals(result)
+        c2pa_sig = detect_c2pa_signal(vp)
+
+        det, score, mode, ai_specific, broadcast_trap = fuse(
+            zv_count=sig["zv_count"],
+            zv_lower_third_roi_count=sig["zv_lower_third_roi_count"],
+            of_count=sig["of_count"],
+            of_max_area=sig["of_max_area"],
+            of_max_area_ratio=sig["of_max_area_ratio"],
+            iw_similarity=sig["iw_best_similarity"],
+            iw_matched=sig["iw_matched"],
+            fft_score=sig["fft_score"],
+            of_texture_variance_mean=sig["of_texture_variance_mean"],
+            of_low_texture_roi_count=sig["of_low_texture_roi_count"],
+            of_wide_lower_roi_count=sig["of_wide_lower_roi_count"],
+            of_corner_compact_roi_count=sig["of_corner_compact_roi_count"],
+            of_lower_third_roi_ratio=sig["of_lower_third_roi_ratio"],
+            of_upper_third_roi_ratio=sig["of_upper_third_roi_ratio"],
+            of_center_roi_ratio=sig["of_center_roi_ratio"],
+            of_wide_top_bottom_count=sig["of_wide_top_bottom_count"],
+            broadcast_scoreboard_trap=sig["broadcast_scoreboard_trap"],
+            broadcast_billboard_trap=sig["broadcast_billboard_trap"],
+            broadcast_pattern_trap=sig["broadcast_pattern_trap"],
+            broadcast_lower_third_pattern=sig["broadcast_lower_third_pattern"],
+            broadcast_scoreboard_pattern=sig["broadcast_scoreboard_pattern"],
+            broadcast_billboard_pattern=sig["broadcast_billboard_pattern"],
+            freq_hf_ratio_mean=sig["freq_hf_ratio_mean"],
+            c2pa_ai=c2pa_sig["c2pa_ai"],
+        )
+
+        self.log_line.emit(
+            f"[EVAL] {vp.name}: det={det}, score={score:.3f}, "
+            f"ai_specific={ai_specific}, broadcast_trap={broadcast_trap}, "
+            f"mode={mode}, elapsed={elapsed:.1f}s"
+        )
+        self.log_line.emit(
+            f"[EVAL]   zv={sig['zv_count']} of={sig['of_count']} "
+            f"iw_sim={sig['iw_best_similarity']:.3f} "
+            f"fft={sig['fft_score']:.3f} hf={sig['freq_hf_ratio_mean']:.3f} "
+            f"c2pa_ai={c2pa_sig['c2pa_ai']}"
+        )
+
+        watermark_count = 1 if det == 1 else 0
+        c2pa_result = {
+            "found": bool(c2pa_sig.get("c2pa_found")),
+            "has_c2pa": bool(c2pa_sig.get("c2pa_found")),
+            "c2pa_ai": bool(c2pa_sig.get("c2pa_ai")),
+            "generator": c2pa_sig.get("c2pa_generator", ""),
+        }
+
+        return {
+            "status": "AI DETECTED" if det == 1 else "AI CLEAR",
+            "watermark_count": watermark_count,
+            "watermark_types": [f"fusion_score={score:.2f}"] if det else [],
+            "full_path": os.path.abspath(path),
+            "total_frames": _get_frame_count(path),
+            "c2pa": c2pa_result,
+            "fusion_score": score,
+            "fusion_mode": mode,
+            "ai_specific": ai_specific,
+            "broadcast_trap": broadcast_trap,
+            "elapsed": elapsed,
+            "signals": sig,
+        }
+
     def run(self):
-        if ocr_detector is None:
-            self.log_line.emit("[BŁĄD] Moduł ocr_detector nie został poprawnie załadowany.")
-            self.all_done.emit()
-            return
-
-        engine, err = ocr_detector.warmup_reader(log_fn=self.log_line.emit)
-        if err or engine is None:
-            self.log_line.emit(f"[BŁĄD KRYTYCZNY] OCR nie mógł się zainicjalizować: {err}")
-            self.log_line.emit("Sprawdź czy easyocr lub paddlepaddle jest zainstalowane w venv.")
-            self.all_done.emit()
-            return
-
-        self.log_line.emit(f"[OCR] Engine: {engine} — gotowy.")
-
         original_base = getattr(config, "REPORTS_BASE_DIR", "reports")
         if self._output_dir:
             setattr(config, "REPORTS_BASE_DIR", self._output_dir)
@@ -477,67 +706,90 @@ class WatermarkWorker(QtCore.QThread):
 
                 self.file_started.emit(global_idx, fname, total_frames)
                 self.log_line.emit(
-                    f"[{local_idx+1}/{len(self._files)}] Rozpoczynam analizę: {fname} "
-                    f"(Conf: {self._confidence}, Sample: {self._sample_rate}, "
-                    f"Detailed: {self._detailed_scan})"
+                    f"[{local_idx+1}/{len(self._files)}] Analizuję: {fname} "
+                    f"(Pipeline: {'evaluate' if EVALUATE_AVAILABLE else 'ocr_detector'})"
                 )
 
-                sampled = max(1, total_frames // self._sample_rate) if total_frames > 0 else 1
-                frames_done = [0]
                 file_start_t = time.monotonic()
 
-                remaining_frames_after = sum(
-                    max(1, all_frame_counts[j] // self._sample_rate)
-                    for j in range(local_idx + 1, len(self._files))
-                    if all_frame_counts[j] > 0
-                )
-
-                def cb(curr, tot,
-                       _sampled=sampled,
-                       _remaining_after=remaining_frames_after,
-                       _ft=frame_times,
-                       _fst=file_start_t,
-                       _fd=frames_done):
-                    _fd[0] += 1
-                    elapsed = time.monotonic() - _fst
-                    if _fd[0] > 0:
-                        avg = elapsed / _fd[0]
-                        _ft.append(avg)
-                        if len(_ft) > 20:
-                            _ft.pop(0)
-                        avg_global = sum(_ft) / len(_ft)
-                        remaining_this = max(0, _sampled - _fd[0]) * avg_global
-                        eta_sec = remaining_this + _remaining_after * avg_global
-                        self.eta_update.emit(f"ETA: {_fmt_eta(eta_sec)}")
-                    self.progress.emit(int(curr), int(tot))
-
-                def preview_cb(*args):
-                    if len(args) == 1:
-                        self.frame_detected.emit(args[0], [])
-                    elif len(args) >= 2:
-                        self.frame_detected.emit(args[0], args[1])
-
-                c2pa_result: dict = {}
-                if c2pa_detector is not None:
-                    try:
-                        c2pa_result = c2pa_detector.detect_c2pa(path) or {}
-                    except Exception as _ce:
-                        c2pa_result = {"error": str(_ce)}
-
                 try:
-                    res = ocr_detector.scan_for_watermarks(
-                        path,
-                        check_stop=lambda: self._stop,
-                        progress_callback=cb,
-                        confidence=self._confidence,
-                        sample_rate=self._sample_rate,
-                        detailed_scan=self._detailed_scan,
-                        preview_callback=preview_cb
-                    )
-                    details = res if isinstance(res, dict) else {}
-                    details["full_path"]    = os.path.abspath(path)
-                    details["total_frames"] = total_frames
-                    details["c2pa"]         = c2pa_result
+                    if EVALUATE_AVAILABLE:
+                        # ── Pipeline evaluate.py (pełna fuzja sygnałów) ──
+                        details = self._run_evaluate_pipeline(path)
+                        details["full_path"]    = os.path.abspath(path)
+                        details["total_frames"] = total_frames
+                    else:
+                        # ── Fallback: ocr_detector ──
+                        if ocr_detector is None:
+                            raise RuntimeError("ocr_detector niedostępny i evaluate.py też niedostępny.")
+
+                        engine, err = ocr_detector.warmup_reader(log_fn=self.log_line.emit)
+                        if err or engine is None:
+                            raise RuntimeError(f"OCR init error: {err}")
+
+                        sampled = max(1, total_frames // self._sample_rate) if total_frames > 0 else 1
+                        frames_done = [0]
+                        remaining_frames_after = sum(
+                            max(1, all_frame_counts[j] // self._sample_rate)
+                            for j in range(local_idx + 1, len(self._files))
+                            if all_frame_counts[j] > 0
+                        )
+
+                        def cb(curr, tot,
+                               _sampled=sampled,
+                               _remaining_after=remaining_frames_after,
+                               _ft=frame_times,
+                               _fst=file_start_t,
+                               _fd=frames_done):
+                            _fd[0] += 1
+                            elapsed = time.monotonic() - _fst
+                            if _fd[0] > 0:
+                                avg = elapsed / _fd[0]
+                                _ft.append(avg)
+                                if len(_ft) > 20:
+                                    _ft.pop(0)
+                                avg_global = sum(_ft) / len(_ft)
+                                remaining_this = max(0, _sampled - _fd[0]) * avg_global
+                                eta_sec = remaining_this + _remaining_after * avg_global
+                                self.eta_update.emit(f"ETA: {_fmt_eta(eta_sec)}")
+                            self.progress.emit(int(curr), int(tot))
+
+                        def preview_cb(*args):
+                            if len(args) == 1:
+                                self.frame_detected.emit(args[0], [])
+                            elif len(args) >= 2:
+                                self.frame_detected.emit(args[0], args[1])
+
+                        c2pa_result: dict = {}
+                        if c2pa_detector is not None:
+                            try:
+                                c2pa_result = c2pa_detector.detect_c2pa(path) or {}
+                            except Exception as _ce:
+                                c2pa_result = {"error": str(_ce)}
+
+                        res = ocr_detector.scan_for_watermarks(
+                            path,
+                            check_stop=lambda: self._stop,
+                            progress_callback=cb,
+                            confidence=self._confidence,
+                            sample_rate=self._sample_rate,
+                            detailed_scan=self._detailed_scan,
+                            preview_callback=preview_cb
+                        )
+                        details = res if isinstance(res, dict) else {}
+                        details["full_path"]    = os.path.abspath(path)
+                        details["total_frames"] = total_frames
+                        details["c2pa"]         = c2pa_result
+
+                    elapsed_total = time.monotonic() - file_start_t
+                    frame_times.append(elapsed_total)
+                    if len(frame_times) > 20:
+                        frame_times.pop(0)
+                    remaining_after = sum(1 for j in range(local_idx + 1, len(self._files)))
+                    if frame_times:
+                        avg = sum(frame_times) / len(frame_times)
+                        self.eta_update.emit(f"ETA: {_fmt_eta(remaining_after * avg)}")
+
                 except Exception as e:
                     self.log_line.emit(f"[BŁĄD] {fname}: {e}")
                     details = {
@@ -545,10 +797,11 @@ class WatermarkWorker(QtCore.QThread):
                         "full_path": os.path.abspath(path),
                         "error": str(e),
                         "total_frames": total_frames,
-                        "c2pa": c2pa_result,
+                        "c2pa": {},
                     }
 
                 self.file_finished.emit(global_idx, details)
+                self.progress.emit(local_idx + 1, len(self._files))
         finally:
             setattr(config, "REPORTS_BASE_DIR", original_base)
 
@@ -569,9 +822,9 @@ class MainWindow(QMainWindow):
         self._splitters_initialized = False
 
         self.worker: Optional[WatermarkWorker] = None
-        self.files: list[str] = []           # wszystkie pliki (stare + nowe)
-        self.files_set: set[str] = set()     # deduplikacja
-        self._analyzed_set: set[str] = set() # juz przeanalizowane
+        self.files: list[str] = []
+        self.files_set: set[str] = set()
+        self._analyzed_set: set[str] = set()
         self.report_paths: dict[int, str] = {}
         self.current_run_dir: Optional[str] = None
         self._file_frame_data: dict[int, dict] = {}
@@ -608,7 +861,7 @@ class MainWindow(QMainWindow):
         self.btn_pick_folder.clicked.connect(self.pick_folder)
         top.addWidget(self.btn_pick_folder)
 
-        self.grp_opts = QGroupBox("Parametry OCR (Watermark)")
+        self.grp_opts = QGroupBox("Parametry analizy")
         opts_lay = QVBoxLayout(self.grp_opts)
         opts_lay.setContentsMargins(8, 4, 8, 4)
         param_lay = QFormLayout()
@@ -619,17 +872,15 @@ class MainWindow(QMainWindow):
         self.spin_conf.setValue(0.60)
         self.spin_conf.setToolTip(
             "OCR Confidence — minimalna pewność rozpoznania tekstu (0.1–1.0).\n"
-            "Niższa wartość = więcej detekcji (ale też fałszywe alarmy).\n"
-            "Wyższa wartość = tylko bardzo pewne wyniki. Zalecane: 0.55–0.70."
+            "Używane tylko w trybie fallback (ocr_detector)."
         )
 
         self.spin_sample = QSpinBox()
         self.spin_sample.setRange(1, 300)
         self.spin_sample.setValue(30)
         self.spin_sample.setToolTip(
-            "Sample Rate — co ile klatek wideo jest analizowana jedna klatka.\n"
-            "Wartość 30 = analizuj co 30. klatkę (1 raz na sekundę przy 30fps).\n"
-            "Mniejsza wartość = dokładniej, ale wolniej. Zalecane: 15–30."
+            "Sample Rate — co ile klatek analizowana jest jedna klatka (fallback OCR).\n"
+            "W trybie evaluate.py używany jest parametr n_frames_median z scan_video."
         )
 
         lbl_conf = QLabel("OCR Confidence:")
@@ -641,14 +892,25 @@ class MainWindow(QMainWindow):
 
         self.toggle_detailed = ToggleSwitch("Szczegółowa analiza (Dwufazowa)")
         self.toggle_detailed.setToolTip(
-            "Tryb dwufazowy — po szybkim skanie uruchamia zaawansowane filtry obrazu\n"
-            "(CLAHE, Top-Hat, gamma, odwrócone kolory) na klatkach bez detekcji.\n"
-            "Wolniejszy, ale wykrywa trudne watermarki (np. białe na jasnym tle)."
+            "Tryb zwykły (OFF): szybki skan — OF + ZV + FFT + C2PA.\n"
+            "  n_frames=15, bez invisible watermark. Czas ~2–4s/film.\n\n"
+            "Tryb dwufazowy (ON): pełny skan — wszystkie sygnały + invisible watermark\n"
+            "  (rivaGAN / DWTDCT). n_frames=30. Wykrywa subtelne, niewidoczne watermarki.\n"
+            "  Wolniejszy (~10–30s/film w zależności od GPU)."
         )
         toggle_row = QHBoxLayout()
         toggle_row.addWidget(self.toggle_detailed)
         toggle_row.addStretch()
         param_lay.addRow("", toggle_row)
+
+        # Informacja o aktywnym pipeline
+        pipeline_info = "evaluate.py (fuzja sygnałów)" if EVALUATE_AVAILABLE else "ocr_detector (fallback)"
+        lbl_pipeline = QLabel(f"Pipeline: <b>{pipeline_info}</b>")
+        lbl_pipeline.setToolTip(
+            "evaluate.py — pełny multi-signal pipeline (OF, ZV, FFT, C2PA, IW, fuzja)\n"
+            "ocr_detector — detekcja na podstawie OCR watermarków (fallback)"
+        )
+        param_lay.addRow("", lbl_pipeline)
 
         dir_lay = QHBoxLayout()
         self.txt_output_dir = QLineEdit()
@@ -690,16 +952,24 @@ class MainWindow(QMainWindow):
         self.table_results.setHorizontalHeaderLabels([
             "Plik", "Typ", "Status AI", "% AI w wideo", "C2PA", "Raport CSV"
         ])
-        hh = self.table_results.horizontalHeader()
-        hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        # Ostatnia kolumna NIE rozciaga sie automatycznie — ma swoj minWidth
-        hh.setStretchLastSection(False)
+
+        clamped_hh = ClampedHeader(
+            Qt.Orientation.Horizontal,
+            _COL_MIN_WIDTHS,
+            self.table_results,
+        )
+        clamped_hh.setStretchLastSection(False)
+        self.table_results.setHorizontalHeader(clamped_hh)
+        clamped_hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+
+        self.table_results.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
         _default_col_widths = [200, 55, 130, 160, 60, 200]
         for col, w in enumerate(_default_col_widths):
             self.table_results.setColumnWidth(col, w)
-            self.table_results.horizontalHeader().setMinimumSectionSize(_COL_MIN_WIDTHS[col])
-        # Wymuszamy minimalne szerokosci per kolumna przez delegate
-        hh.sectionResized.connect(self._enforce_col_min_widths)
+
         self.table_results.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table_results.setAlternatingRowColors(True)
@@ -791,37 +1061,15 @@ class MainWindow(QMainWindow):
         self.status = self.statusBar()
         self._apply_theme(True)
 
-        if ocr_detector is not None:
+        # Fallback warmup — tylko gdy evaluate.py niedostępny
+        if not EVALUATE_AVAILABLE and ocr_detector is not None:
             QtCore.QTimer.singleShot(500, self._warmup_ocr)
-
-    # ----------------------------------------------------------------
-    # Wymuszanie minimalnych szerokosci kolumn przy resize
-    # ----------------------------------------------------------------
-
-    @pyqtSlot(int, int, int)
-    def _enforce_col_min_widths(self, col: int, old_size: int, new_size: int) -> None:
-        """Pilnuje, żeby żadna kolumna nie była węższa niż _COL_MIN_WIDTHS[col]."""
-        min_w = _COL_MIN_WIDTHS[col] if col < len(_COL_MIN_WIDTHS) else 40
-        if new_size < min_w:
-            # Blokujemy sygnał żeby nie wywolac petli
-            hh = self.table_results.horizontalHeader()
-            hh.blockSignals(True)
-            self.table_results.setColumnWidth(col, min_w)
-            hh.blockSignals(False)
-
-    # ----------------------------------------------------------------
-    # showEvent: dopiero tu okno ma prawdziwa geometrie
-    # ----------------------------------------------------------------
 
     def showEvent(self, event):
         super().showEvent(event)
         if not self._splitters_initialized:
             self._splitters_initialized = True
             self._restore_splitters()
-
-    # ----------------------------------------------------------------
-    # Zapis / odczyt pozycji splitterow i szerokosci kolumn
-    # ----------------------------------------------------------------
 
     def _restore_splitters(self):
         total_w = self.main_splitter.width()
@@ -860,7 +1108,8 @@ class MainWindow(QMainWindow):
                 widths = [int(x) for x in col_data]
                 for col, w in enumerate(widths):
                     if col < self.table_results.columnCount():
-                        safe_w = max(w, _COL_MIN_WIDTHS[col] if col < len(_COL_MIN_WIDTHS) else 40)
+                        mn = _COL_MIN_WIDTHS[col] if col < len(_COL_MIN_WIDTHS) else 40
+                        safe_w = max(mn, w)
                         self.table_results.setColumnWidth(col, safe_w)
             except Exception:
                 self._settings.remove(_KEY_TABLE_COLS)
@@ -876,8 +1125,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._save_splitters()
         super().closeEvent(event)
-
-    # ----------------------------------------------------------------
 
     def _warmup_ocr(self):
         import threading
@@ -1062,7 +1309,6 @@ class MainWindow(QMainWindow):
         self._add_files(sorted(to_add))
 
     def start_analysis(self) -> None:
-        # BUG FIX: analizuj TYLKO pliki ktore jeszcze nie zostaly przeanalizowane
         pending = [f for f in self.files if f not in self._analyzed_set]
         if not pending:
             QMessageBox.information(
@@ -1072,7 +1318,6 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Indeks pierwszego oczekujacego wiersza w tabeli
         row_offset = len(self.files) - len(pending)
 
         self._file_frame_data = {}
@@ -1102,7 +1347,6 @@ class MainWindow(QMainWindow):
         self.worker.all_done.connect(self.on_all_done)
         self.worker.start()
 
-        # Oznacz jako w trakcie analizy (dodamy do _analyzed_set po zakonczeniu)
         self._current_pending = pending
 
     def stop_analysis(self) -> None:
@@ -1144,14 +1388,35 @@ class MainWindow(QMainWindow):
         total_frames = details.get("total_frames", 0) or 0
         sampled = max(1, total_frames // max(1, self.spin_sample.value())) if total_frames > 0 else 1
 
+        fusion_score = details.get("fusion_score")
+        ai_specific = details.get("ai_specific", None)
+        broadcast_trap = details.get("broadcast_trap", None)
+
         if count > 0:
             types = ", ".join(details.get("watermark_types", []))
-            si = QTableWidgetItem(f"🔴 AI DETECTED\n{types}")
+            si_text = f"🔴 AI DETECTED\n{types}" if types else "🔴 AI DETECTED"
+            si = QTableWidgetItem(si_text)
             si.setForeground(QtGui.QBrush(QtGui.QColor("#f38ba8")))
         else:
             si = QTableWidgetItem("✅ AI CLEAR")
             si.setForeground(QtGui.QBrush(QtGui.QColor("#a6e3a1")))
         si.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        if fusion_score is not None:
+            tip_parts = [f"fusion_score={fusion_score:.3f}"]
+            if ai_specific is not None:
+                tip_parts.append(f"ai_specific={ai_specific}")
+            if broadcast_trap is not None:
+                tip_parts.append(f"broadcast_trap={broadcast_trap}")
+            signals = details.get("signals", {})
+            if signals:
+                tip_parts.append(
+                    f"zv={signals.get('zv_count',0)} "
+                    f"of={signals.get('of_count',0)} "
+                    f"iw={signals.get('iw_best_similarity',0):.3f} "
+                    f"hf={signals.get('freq_hf_ratio_mean',0):.3f}"
+                )
+            si.setToolTip("  |  ".join(tip_parts))
         self.table_results.setItem(idx, COL_STATUS, si)
 
         if total_frames > 0 and count > 0:
@@ -1160,6 +1425,13 @@ class MainWindow(QMainWindow):
             pi.setForeground(QtGui.QBrush(
                 QtGui.QColor("#f38ba8") if ai_pct >= 50 else QtGui.QColor("#fab387")
             ))
+        elif fusion_score is not None:
+            if count > 0:
+                pi = QTableWidgetItem(f"🔴 score={fusion_score:.2f}")
+                pi.setForeground(QtGui.QBrush(QtGui.QColor("#f38ba8")))
+            else:
+                pi = QTableWidgetItem(f"✅ score={fusion_score:.2f}")
+                pi.setForeground(QtGui.QBrush(QtGui.QColor("#a6e3a1")))
         else:
             pi = QTableWidgetItem("✅ 100% CLEAR")
             pi.setForeground(QtGui.QBrush(QtGui.QColor("#a6e3a1")))
@@ -1175,14 +1447,18 @@ class MainWindow(QMainWindow):
             elif c2pa.get("found") or c2pa.get("has_c2pa"):
                 c2pa_text = "✅ C2PA"
                 c2pa_color = "#a6e3a1"
-                issuer = c2pa.get("issuer") or c2pa.get("producer") or ""
+                issuer = c2pa.get("issuer") or c2pa.get("producer") or c2pa.get("generator") or ""
+                is_ai = c2pa.get("c2pa_ai") or c2pa.get("ai_origin")
                 c2pa_tip = f"Content Credentials znalezione.\nWydawca: {issuer}" if issuer else "Content Credentials znalezione."
+                if is_ai:
+                    c2pa_text = "🤖 C2PA-AI"
+                    c2pa_tip += "\n⚠️ Metadane wskazują na generowanie AI."
             else:
                 c2pa_text = "❌ Brak"
                 c2pa_color = "#6c7086"
                 c2pa_tip = "Brak metadanych C2PA / Content Credentials."
         else:
-            if c2pa_detector is None:
+            if c2pa_detector is None and not EVALUATE_AVAILABLE:
                 c2pa_text = "— N/A"
                 c2pa_color = "#6c7086"
                 c2pa_tip = "Moduł c2pa_detector niedostępny."
@@ -1199,12 +1475,11 @@ class MainWindow(QMainWindow):
         report_file = details.get("csv_path", folder if folder else "Brak")
         self.table_results.setItem(idx, COL_CSV, QTableWidgetItem(str(report_file)))
 
-        self.append_log(f"   ➔ Plik zakończony. Znaleziono {count} watermarków. C2PA: {c2pa_text}")
+        self.append_log(f"   ➔ Zakończono. Detekcja AI: {'TAK' if count > 0 else 'NIE'}. C2PA: {c2pa_text}.")
         self.table_results.resizeRowsToContents()
 
     @pyqtSlot()
     def on_all_done(self) -> None:
-        # Oznacz przetworzone pliki jako przeanalizowane
         if hasattr(self, "_current_pending"):
             self._analyzed_set.update(self._current_pending)
             self._current_pending = []
@@ -1215,7 +1490,6 @@ class MainWindow(QMainWindow):
         for btn in (self.btn_pick_files, self.btn_pick_folder):
             btn.setEnabled(True)
 
-        # START aktywny tylko jesli sa nowe (nieprzetworzone) pliki
         pending_left = [f for f in self.files if f not in self._analyzed_set]
         self.btn_start.setEnabled(len(pending_left) > 0)
         self.btn_stop.setEnabled(False)
