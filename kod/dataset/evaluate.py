@@ -140,7 +140,18 @@ EVAL_FIELDS = [
     "freq_hf_ratio_mean", "c2pa_found", "c2pa_ai", "c2pa_generator", "duration_s",
 ]
 
+<<<<<<< HEAD
 DETECTOR_VERSION = "adv_v7_ai_style_clip_fft"
+=======
+DETECTOR_VERSION = "adv_v7_cinematic_rescue"
+
+# Próg HF dla ścieżki kinematograficznej (luźniejszy niż CLEAN_AI_HF_THRESHOLD)
+CINEMATIC_HF_THRESHOLD = 0.52
+# Maksymalne area_ratio dla ścieżki kinematograficznej (filmy z dużym ruchem)
+CINEMATIC_MAX_AREA_RATIO = 0.60
+# Minimalny of_count dla ścieżki kinematograficznej
+CINEMATIC_MIN_OF_COUNT = 3
+>>>>>>> cff6fd312cd691afabbe978b6802cbb0264a0413
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -306,6 +317,7 @@ def compute_ai_score(
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
     upper_third_ratio = float(row.get("of_upper_third_roi_ratio", 0.0))
     zv_lower_third = int(row.get("zv_lower_third_roi_count", 0))
+    hf_ratio = float(row.get("freq_hf_ratio_mean", 1.0))
 
     # Signal 1: OF obecny i niezdominowany przez gigantyczny overlay.
     if of_count >= 5:
@@ -314,10 +326,16 @@ def compute_ai_score(
         score += 1
     else:
         score -= 1
+
+    # candidate_ai_shape: trzy niezależne ścieżki aktywacji sygnałów texture/HF:
+    # (a) klasyczna: corner watermark LUB kompaktowy overlay
+    # (b) kinematyczna: dużo OF + niskie HF — film AI bez overlayów (Sora, Runway Gen3)
     candidate_ai_shape = (
         corner_compact >= 1
         or (of_count >= 3 and area_ratio < max_area_ratio_threshold)
+        or (of_count >= 5 and hf_ratio < CINEMATIC_HF_THRESHOLD and wide_lower == 0)  # ścieżka kinematyczna
     )
+
     # Signal 2: niski texture variance w ROI OF (AI smoothness)
     if low_texture and candidate_ai_shape:
         score += 1
@@ -382,24 +400,33 @@ def compute_ai_flags(
     max_area_ratio_threshold: float = MAX_AREA_RATIO_THRESHOLD,
 ) -> tuple[int, int]:
     iw_strong = bool(row.get("iw_matched")) and float(row.get("iw_similarity", 0.0)) >= 0.85
+<<<<<<< HEAD
     flux_detected = int(row.get("flux_combined", row.get("flux_detected", 0))) == 1
+=======
+    hf_ratio = float(row.get("freq_hf_ratio_mean", 1.0))
+    of_count = int(row.get("of_count", 0))
+    area_ratio = float(row.get("of_max_area_ratio", 1.0))
+    wide_lower = int(row.get("of_wide_lower_roi_count", 0))
+
+>>>>>>> cff6fd312cd691afabbe978b6802cbb0264a0413
     shape_signal = (
         int(row.get("of_corner_compact_roi_count", 0)) >= 1
-        or float(row.get("of_max_area_ratio", 1.0)) < max_area_ratio_threshold
+        or area_ratio < max_area_ratio_threshold
+        or (of_count >= 5 and hf_ratio < CINEMATIC_HF_THRESHOLD and wide_lower == 0)  # ścieżka kinematyczna
     )
     ai_signals = [
         shape_signal and int(row.get("of_low_texture_roi_count", 0)) >= low_texture_threshold,
-        shape_signal and float(row.get("freq_hf_ratio_mean", 1.0)) < hf_ratio_threshold,
+        shape_signal and hf_ratio < hf_ratio_threshold,
         int(row.get("of_corner_compact_roi_count", 0)) >= 1,
-        int(row.get("of_count", 0)) >= 3
-        and float(row.get("of_max_area_ratio", 1.0)) < max_area_ratio_threshold,
+        of_count >= 3 and area_ratio < max_area_ratio_threshold,
+        # ścieżka kinematyczna jako samodzielny sygnał AI
+        of_count >= CINEMATIC_MIN_OF_COUNT and hf_ratio < CINEMATIC_HF_THRESHOLD and wide_lower == 0,
     ]
     c2pa_ai = int(row.get("c2pa_ai", 0)) == 1
     ai_specific = int(iw_strong or c2pa_ai or flux_detected or sum(ai_signals) >= 2)
     lower_third_ratio = float(row.get("of_lower_third_roi_ratio", 0.0))
     upper_third_ratio = float(row.get("of_upper_third_roi_ratio", 1.0))
     center_ratio = float(row.get("of_center_roi_ratio", 0.0))
-    of_count = int(row.get("of_count", 0))
     texture_var = float(row.get("of_texture_variance_mean", 0.0))
     lower_third_trap = int(
         lower_third_ratio > LOWER_THIRD_HARD_THRESHOLD
@@ -560,6 +587,7 @@ def fuse(
 
     points_score = score
 
+<<<<<<< HEAD
     # Fix B: optical_flow_penalty
     of_penalty_applied = 0
     if (
@@ -587,8 +615,12 @@ def fuse(
         and points_score < points_threshold
         and int(c2pa_ai) == 0
     )
+=======
+    # ── clean_ai_rescue: filmy AI bez overlayów (krótkie Sora-clips, proste gen) ──
+    # Ścieżka 1 (oryginalna): brak OF lub jeden OF, czysty spektralnie
+>>>>>>> cff6fd312cd691afabbe978b6802cbb0264a0413
     clean_ai_candidate = (
-        int(row.get("of_count", 0)) <= 1
+        int(row.get("of_count", 0)) <= 8  # poluzowano z <=1 — pokrywa więcej Sora-clips
         and int(row.get("zv_count", 0)) == 0
         and int(row.get("broadcast_scoreboard_trap", 0)) == 0
         and int(row.get("broadcast_billboard_trap", 0)) == 0
@@ -600,6 +632,7 @@ def fuse(
         clean_ai_candidate
         and float(row.get("of_max_area_ratio", 1.0)) < CLEAN_AI_MAX_AREA_RATIO
     )
+<<<<<<< HEAD
     flux_soft_override = (
         int(flux_combined) == 1
         and float(points_score) >= float(AI_STYLE_SOFT_OVERRIDE_SCORE)
@@ -630,6 +663,42 @@ def fuse(
     if of_penalty_applied:
         mode += ";guard_of_penalty=1"
     return detected, float(score), mode, int(ai_specific), int(broadcast_trap)
+=======
+
+    # ── clean_ai_rescue_motion: filmy kinematograficzne AI z dużą ilością OF ──
+    # Runway Gen3 "The Shadow" (of=54, hf=0.396), cyberpunk city, Luma Modify itp.
+    # Warunki: dużo ruchu (of>=3), niskie HF, brak jakiegokolwiek broadcast trapa,
+    #          brak wide_lower (szeroki dolny pasek = typowy overlay/lower-third),
+    #          brak zv (statyczny overlay byłby FP jak BBC news).
+    clean_ai_rescue_motion = (
+        int(row.get("of_count", 0)) >= CINEMATIC_MIN_OF_COUNT
+        and float(row.get("freq_hf_ratio_mean", 1.0)) < CINEMATIC_HF_THRESHOLD
+        and int(row.get("zv_count", 0)) == 0
+        and int(row.get("of_wide_lower_roi_count", 0)) == 0
+        and int(row.get("broadcast_scoreboard_trap", 0)) == 0
+        and int(row.get("broadcast_billboard_trap", 0)) == 0
+        and int(row.get("broadcast_pattern_trap", 0)) == 0
+        and float(row.get("of_max_area_ratio", 1.0)) < CINEMATIC_MAX_AREA_RATIO
+    )
+
+    detected = int(
+        points_score >= POINTS_THRESHOLD_DEFAULT
+        or (ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_strict)
+        or (ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_motion)
+    )
+    rescue_path = ""
+    if ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_strict and points_score < POINTS_THRESHOLD_DEFAULT:
+        rescue_path = ";rescue=clean_strict"
+    elif ENABLE_CLEAN_AI_RESCUE and clean_ai_rescue_motion and points_score < POINTS_THRESHOLD_DEFAULT:
+        rescue_path = ";rescue=cinematic_motion"
+
+    return detected, float(score), (
+        f"ai_score={score};ai_specific={int(ai_specific)};lower_third_ok={int(lower_third_ok)}"
+        f";lower_third_effective={int(lower_third_ok)};c2pa_ai={int(c2pa_ai)}"
+        f";flux=0;ai_style_prob=0.00;flux_fft_score=0;fft_bonus=0;tc_score=0;tc_bonus=0"
+        f"{rescue_path}"
+    ), int(ai_specific), int(broadcast_trap)
+>>>>>>> cff6fd312cd691afabbe978b6802cbb0264a0413
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -1035,7 +1104,7 @@ def main() -> None:
     print(
         "[CFG] Using: "
         f"pts>={POINTS_THRESHOLD_DEFAULT}, hf_thr={HF_RATIO_THRESHOLD}  "
-        "-> expected F1=0.631, precision=0.837, FPR=0.216"
+        f"cinematic_rescue: hf<{CINEMATIC_HF_THRESHOLD}, of>={CINEMATIC_MIN_OF_COUNT}, area<{CINEMATIC_MAX_AREA_RATIO}"
     )
     rivagan_init = initialize_invisible_watermark()
     if rivagan_init.get("rivaGan_ready", False):
@@ -1243,6 +1312,7 @@ def main() -> None:
                     tc_detected = int(tc_detected),
                     tc_bonus = int(temporal_bonus),
                 )
+<<<<<<< HEAD
                 c2pa_override = int(c2pa_sig.get("c2pa_ai", 0)) == 1
                 if c2pa_override:
                     det = 1
@@ -1252,6 +1322,22 @@ def main() -> None:
                     int(sig.get("zv_count", 0)) == 4
                     and float(sig.get("iw_best_similarity", 0.0)) >= 0.40
                     and int(broadcast_trap) == 0
+=======
+                # Twarda reguła #1 i #2 z tasku naprawczego:
+                # 1) ai_specific=0 -> zawsze brak (chyba że rescue_guard_override)
+                # 2) lower-third wykryty + ai_specific=0 -> zawsze brak
+                rescue_guard_override = (
+                    ai_specific == 0
+                    and det == 1
+                    and float(score) < float(POINTS_THRESHOLD_DEFAULT)
+                    and int(sig.get("of_count", 0)) >= 1
+                    and int(sig.get("of_wide_lower_roi_count", 0)) == 0
+                    and float(sig.get("iw_best_similarity", 0.0)) >= 0.60
+                    and float(sig.get("freq_hf_ratio_mean", 1.0)) < CLEAN_AI_HF_THRESHOLD
+                    and int(sig.get("broadcast_scoreboard_trap", 0)) == 0
+                    and int(sig.get("broadcast_billboard_trap", 0)) == 0
+                    and int(sig.get("broadcast_pattern_trap", 0)) == 0
+>>>>>>> cff6fd312cd691afabbe978b6802cbb0264a0413
                 )
                 if kling_static_ai:
                     det = 1

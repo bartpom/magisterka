@@ -25,7 +25,7 @@ opiera si\k{e} na~grze minimax pomi\k{e}dzy generatorem a~dyskryminatorem.
 W~kontekk\'{s}cie wideo generatywne modele GAN osi\k{a}gn\k{e}\l{}y prze\l{}om
 z~architektur\k{a} \textit{VideoGAN} \cite{Vondrick2016VideoGAN}
 oraz jej rozszerzeniami umo\.{z}liwiaj\k{a}cymi syntez\k{e} d\l{}u\.{z}szych sekwencji
-temporal nie koherentnych.
+temporalnie koherentnych.
 Modele GAN by\l{}y r\'{o}wnie\.{z} pierwsz\k{a} klas\k{a} modeli powszechnie stosowan\k{a}
 do~tworzenia \textit{deepfake}\'{o}w twarzy -- system FaceSwap i~jego pochodne
 opiera\l{}y si\k{e} na~enkoderze-dekoderze trenowanym adversaryjnie
@@ -76,16 +76,16 @@ Nowoczesne podej\'{s}cia u\.{z}ywaj\k{a} Convolutional Neural Networks (CNN)
 lub Vision Transformer\'{o}w (ViT) trenowanych na~du\.{z}ych zbiorach
 danych deepfake \cite{Dong2023CLIPDeepfake}.
 Li et al.\ wykazali, \.{z}e specjalizowane detektory CNN osi\k{a}gaj\k{a} AUC
-powy\.{z}ej 0,95 na~zbiorze FaceForensics++ w~warunkach controlled,
+powy\.{z}ej 0,95 na~zbiorze FaceForensics++ w~warunkach kontrolowanych,
 natomiast spad\l{}y do~0,65--0,72 na~materia\l{}ach z~Internetu
 po~wielokrotnej kompresji \cite{Li2025AIGCSurvey}.
 
-\subsection{Analiza przepływu optycznego}
+\subsection{Analiza przep\l{}ywu optycznego}
 
 Przep\l{}yw optyczny (\textit{optical flow}) jest kluczow\k{a} cech\k{a}
 temporal\k{a} wykorzystywan\k{a} w~detekcji wideo AI.
 Amerini et al.\ \cite{Amerini2019ICCV} zaproponowali
-arch\'{i}tektur\k{e} CNN przyjmuj\k{a}c\k{a} na~wej\'{s}ciu mapy przep\l{}ywu
+architektur\k{e} CNN przyjmuj\k{a}c\k{a} na~wej\'{s}ciu mapy przep\l{}ywu
 optycznego zamiast klatek wideo, uzyskuj\k{a}c znacz\k{a}c\k{a} popraw\k{e}
 wykrywalno\'{s}ci dla film\'{o}w deepfake z~podmian\k{a} twarzy.
 Caldelli et al.\ \cite{Caldelli2021OpticalFlowCNN} rozszerzyli
@@ -97,7 +97,7 @@ Nassif et al.\ \cite{Nassif2022ImprovedOpticalFlow}
 zaproponowali ulepszony estymator przep\l{}ywu odporny na~kompresj\k{e} wideo,
 co jest istotne dla materia\l{}\'{o}w pobieranych z~platform spo\l{}eczno\'{s}ciowych.
 
-\subsection{Analiza widma częstotliwościowego (FFT)}
+\subsection{Analiza widma cz\k{e}stotliwo\'{s}ciowego (FFT)}
 
 Transformata Fouriera (FFT) umo\.{z}liwia analiz\k{e} rozk\l{}adu
 cz\k{e}stotliwo\'{s}ci w~klatkach wideo. Badania wykazywa\l{}y,
@@ -108,7 +108,7 @@ i~specyficznych filtr\'{o}w splotowych \cite{Frank2020FrequencyDNN}.
 Artifakty te s\k{a} cz\k{e}sto niewidoczne go\l{}ym okiem, ale statystycznie
 odst\k{a}puj\k{a} od~rozk\l{}adu widmowego naturalnych nagra\'{n} kamerowych.
 \textit{Szum sensora} kamery~-- zwany te\.{z} sygna\l{}em PRNU (\textit{Photo-Response
-Non-Uniformity}) -- wyst\k{e}puje w~autentycznych nagraniach jako por\k{a}wnywalny
+Non-Uniformity}) -- wyst\k{e}puje w~autentycznych nagraniach jako por\'{o}wnywalny
 charakterystyczny wzorzec, kt\'{o}ry jest nieobecny lub zmodyfikowany w~tre\'{s}ciach
 generowanych AI \cite{Wang2024ReliabilityPerspective}.
 
@@ -119,7 +119,7 @@ w~jednym modelu. Badania z~zastosowaniem Vision Transformer\'{o}w (ViT)
 pokaza\l{}y, \.{z}e mechanizm uwagi (\textit{attention}) jest zdolny
 do~identyfikacji lokalnych niesp\'{o}jno\'{s}ci w~deepfake\'ach nawet przy
 du\.{z}ej jako\'{s}ci generowania \cite{Dong2023CLIPDeepfake}.
-Oddzielnie, modele \textit{CLIP-based} pozwalaj\k{a} wykory\'{s}tywa\'{c}
+Oddzielnie, modele \textit{CLIP-based} pozwalaj\k{a} wykorzystywa\'{c}
 reprezentacje wizualno-j\k{e}zykowe do~zero-shot detekcji nowych modeli
 generatywnych, na~kt\'{o}rych klasyczne detektory nie by\l{}y trenowane
 \cite{Li2025AIGCSurvey}.
@@ -137,8 +137,8 @@ niewidocznego lub widocznego identyfikatora w~momencie generowania.
 \subsection{Niewidoczne znakowanie wodne}
 
 Modele takie jak HiDDeN \cite{Zhu2018HiDDeN}
-i~jego nast\k{e}pcy ucz\k{a} si\k{e} osadza\'{c} bity informacji w~piksalch obrazu
-w~spos\'{o}b niezauwa\.{z}alny dla cz\l{}owieka, ale wykrywalny przez koder.
+i~jego nast\k{e}pcy ucz\k{a} si\k{e} osadza\'{c} bity informacji w~pikselach obrazu
+w~spos\'{o}b niezauwa\.{z}alny dla cz\l{}owieka, ale wykrywalny przez dekoder.
 Luo et al.\ \cite{Luo2025WatermarkingAIGC} dokonali przegl\k{a}du metod
 znakowania wodnego dla tre\'{s}ci AIGC, wykazuj\k{a}c,
 \.{z}e aktualne metody s\k{a} podatne na~ataki transformacji (zmiana rozdzielczo\'{s}ci,
@@ -163,11 +163,11 @@ ale podatne na~adversaryjne usuwanie.
 Piet et al.\ \cite{Piet2024SoKWatermarking} dokonali systematyzacji
 (SoK) metod znakowania wodnego dla tre\'{s}ci AIGC, wyodr\k{e}bniaj\k{a}c
 wymagania: skalowalno\'{s}\'{c}, odporno\'{s}\'{c} na~usuwanie i~falsyfikacj\k{e},
-nisk\k{a} utrat\k{a} jako\'{s}ci tre\'{s}ci. \'{Z}aden z~aktualnych system\'{o}w
+nisk\k{a} utrat\k{e} jako\'{s}ci tre\'{s}ci. \'{Z}aden z~aktualnych system\'{o}w
 nie spe\l{}nia jednocze\'{s}nie wszystkich tych wymaga\'{n}.
-Inducja Content Credentials (C2PA) \cite{C2PA2024Spec} podejmuje
+Initjatywa Content Credentials (C2PA) \cite{C2PA2024Spec} podejmuje
 podej\'{s}cie metadanowe: ka\.{z}dy plik mo\.{z}e nosi\'{c} cyfrowo podpisany
-lancuch proweniencji informuj\k{a}cy o~historii edycji.
+\l{}a\'{n}cuch proweniencji informuj\k{a}cy o~historii edycji.
 
 % -------------------------------------------------------------------
 \section{Zbiory danych i~benchmarki}
@@ -204,14 +204,14 @@ Badania konsekwentnie potwierdzaj\k{a},
 przy testowaniu na~nowym generatorze \cite{Wang2024ReliabilityPerspective}.
 
 % -------------------------------------------------------------------
-\section{Otwarte problemy i~kierunki badań}
+\section{Otwarte problemy i~kierunki bada\'{n}}
 \label{sec:otwarte_problemy}
 
 Literatura identyfikuje kilka kluczowych otwartych problem\'{o}w:
 
 \paragraph{Generalizacja mi\k{e}dzy-modelowa.}
 G\l{}\'{o}wnym wyzwaniem jest budowa detektor\'{o}w, kt\'{o}re dzia\l{}aj\k{a}
-skutecznie na~modeli nieb\k{e}d\k{a}cych cz\k{e}\'{s}ci\k{a} zbioru treningowego.
+skutecznie na~modelach nieb\k{e}d\k{a}cych cz\k{e}\'{s}ci\k{a} zbioru treningowego.
 Sun et al.\ \cite{Sun2024GenVideo} wykazali, \.{z}e detektory
 trenowane na~starszych modelach GAN osi\k{a}gaj\k{a} tylko
 $\sim$60\% AUC na~filmach z~Kling AI czy Runway Gen-4.
@@ -234,7 +234,7 @@ oraz w~literaturze \cite{Wang2024ReliabilityPerspective}.
 Wi\k{e}kszo\'{s}\'{c} komercyjnych narz\k{e}dzi zwraca jedynie wynik liczbowy
 bez wyja\'{s}nienia, kt\'{o}re sygna\l{}y zadecydowa\l{}y o~klasyfikacji.
 Badania z~zakresu XAI (\textit{eXplainable AI}) stosowane do~deepfake
-nale\k{z}\k{a} do~mniejszo\'{s}ci w~literaturze \cite{Khan2025ComprehensiveSurvey}.
+nale\.{z}\k{a} do~mniejszo\'{s}ci w~literaturze \cite{Khan2025ComprehensiveSurvey}.
 
 \paragraph{Wy\'{s}cig zbroje\'{n}.}
 Ka\.{z}da nowa generacja modeli generatywnych wymaga przetrenowania
