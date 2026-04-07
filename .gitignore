@@ -71,6 +71,10 @@ reszta plików.rar
 *.rar
 *.zip
 
+# Tymczasowe pliki ewaluacji
+temp_eval_out.txt
+**/temp_eval_out.txt
+
 # Dataset code only in kod/dataset, no local media
 kod/dataset/*
 !kod/dataset/*.py
