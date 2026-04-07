@@ -1,95 +1,95 @@
 \chapter{Implementacja i~ewaluacja systemu detekcji}
 
-Celem implementacji by\l{}o zbudowanie praktycznego narz\k{e}dzia do~wsadowej analizy
-\textbf{plik\'{o}w wideo} pod~k\k{a}tem obecno\'{s}ci jawnych i~ukrytych znak\'{o}w wodnych,
-metadanych pochodzenia oraz artefakt\'{o}w typowych dla~materia\l{}\'{o}w wygenerowanych
-lub przetworzonych przez systemy generatywnej~AI. System powsta\l{} w~j\k{e}zyku
-\textbf{Python}, kt\'{o}ry oferuje dojrza\l{}y ekosystem bibliotek do~przetwarzania obrazu,
-analizy sygna\l{}u i~budowy interfejs\'{o}w desktopowych, a~zarazem umo\.{z}liwia szybkie
+Celem implementacji było zbudowanie praktycznego narzędzia do~wsadowej analizy
+\textbf{plików wideo} pod~kątem obecności jawnych i~ukrytych znaków wodnych,
+metadanych pochodzenia oraz artefaktów typowych dla~materiałów wygenerowanych
+lub przetworzonych przez systemy generatywnej~AI. System powstał w~języku
+\textbf{Python}, który oferuje dojrzały ekosystem bibliotek do~przetwarzania obrazu,
+analizy sygnału i~budowy interfejsów desktopowych, a~zarazem umożliwia szybkie
 prototypowanie i~iteracyjne rozszerzanie metod detekcji.
 
-Architektura rozwi\k{a}zania ma~charakter modu\l{}owy. Aplikacja sk\l{}ada si\k{e}
-z~trzech warstw: interfejsu u\.{z}ytkownika (GUI), warstwy orkiestracji analizy
-oraz zestawu wyspecjalizowanych detektor\'{o}w odpowiedzialnych za~wykrywanie
-watermark\'{o}w widocznych, pr\'{o}b\k{e} odczytu watermark\'{o}w niewidzialnych,
-analiz\k{e} metadanych C2PA, ocen\k{e} artefakt\'{o}w cz\k{e}stotliwo\'{s}ciowych
-i~identyfikacj\k{e} statycznych nak\l{}adek powtarzaj\k{a}cych si\k{e} w~kolejnych klatkach.
-Taki podzia\l{} upraszcza dalszy rozw\'{o}j projektu, poniewa\.{z} nowe heurystyki
-i~klasyfikatory mog\k{a} by\'{c} dodawane jako osobne modu\l{}y bez~przebudowy ca\l{}ej aplikacji.
+Architektura rozwiązania ma~charakter modułowy. Aplikacja składa się
+z~trzech warstw: interfejsu użytkownika (GUI), warstwy orkiestracji analizy
+oraz zestawu wyspecjalizowanych detektorów odpowiedzialnych za~wykrywanie
+watermarków widocznych, próbę odczytu watermarków niewidzialnych,
+analizę metadanych C2PA, ocenę artefaktów częstotliwościowych
+i~identyfikację statycznych nakładek powtarzających się w~kolejnych klatkach.
+Taki podział upraszcza dalszy rozwój projektu, ponieważ nowe heurystyki
+i~klasyfikatory mogą być dodawane jako osobne moduły bez~przebudowy całej aplikacji.
 
-\section{J\k{e}zyk programowania i~biblioteki}
+\section{Język programowania i~biblioteki}
 
-Rdze\'{n} systemu zaimplementowano w~j\k{e}zyku \textbf{Python~3}.
-Graficzny interfejs u\.{z}ytkownika zbudowano z~wykorzystaniem biblioteki \textbf{PyQt6} ---
-zestawu wi\k{a}za\'{n} j\k{e}zyka Python do~biblioteki Qt6, kt\'{o}ry pozwala tworzy\'{c}
-natywnie wygl\k{a}daj\k{a}ce aplikacje okienkowe na~systemach Windows, macOS i~Linux.
-Dzi\k{e}ki temu mo\.{z}liwe by\l{}o przygotowanie w~pe\l{}ni funkcjonalnej aplikacji desktopowej
-z~tabel\k{a} wynik\'{o}w, mechanizmem kolejkowania plik\'{o}w, paskiem post\k{e}pu,
-podgl\k{a}dem klatki oraz obs\l{}ug\k{a} raport\'{o}w generowanych dla~ka\.{z}dego
-analizowanego materia\l{}u.
+Rdzeń systemu zaimplementowano w~języku \textbf{Python~3}.
+Graficzny interfejs użytkownika zbudowano z~wykorzystaniem biblioteki \textbf{PyQt6} ---
+zestawu wiązań języka Python do~biblioteki Qt6, który pozwala tworzyć
+natywnie wyglądające aplikacje okienkowe na~systemach Windows, macOS i~Linux.
+Dzięki temu możliwe było przygotowanie w~pełni funkcjonalnej aplikacji desktopowej
+z~tabelą wyników, mechanizmem kolejkowania plików, paskiem postępu,
+podglądem klatki oraz obsługą raportów generowanych dla~każdego
+analizowanego materiału.
 
-W~warstwie przetwarzania wideo kluczow\k{a} rol\k{e} pe\l{}ni\k{a} biblioteki \textbf{OpenCV}
+W~warstwie przetwarzania wideo kluczową rolę pełnią biblioteki \textbf{OpenCV}
 i~\textbf{NumPy}. OpenCV odpowiada za~odczyt klatek z~pliku wideo, operacje na~obrazie
-(np.\ filtrowanie CLAHE, wyr\'{o}wnanie histogramu, detekcja kraw\k{e}dzi),
-obliczanie przep\l{}ywu optycznego metod\k{a} Farneb\"acka oraz wst\k{e}pne przygotowanie
-danych dla~kolejnych etap\'{o}w. NumPy s\l{}u\.{z}y do~wydajnych oblicze\'{n}
-macierzowych i~operacji na~pikselach. Biblioteka \textbf{Pandas} umo\.{z}liwia
-agregacj\k{e} wynik\'{o}w z~wielu klatek i~zapis raport\'{o}w do~plik\'{o}w~CSV.
+(np.\ filtrowanie CLAHE, wyrównanie histogramu, detekcja krawędzi),
+obliczanie przepływu optycznego metodą Farnebäcka oraz wstępne przygotowanie
+danych dla~kolejnych etapów. NumPy służy do~wydajnych obliczeń
+macierzowych i~operacji na~pikselach. Biblioteka \textbf{Pandas} umożliwia
+agregację wyników z~wielu klatek i~zapis raportów do~plików~CSV.
 
 Do~rozpoznawania tekstu w~klatkach wideo (watermarki widoczne, napisy,
-\textit{lower thirds}) aplikacja korzysta z~silnik\'{o}w~OCR.
-W~zale\.{z}no\'{s}ci od~konfiguracji \'{s}rodowiska uruchamiany jest silnik
-\textbf{EasyOCR} lub \textbf{PaddleOCR} --- oba dzia\l{}aj\k{a} lokalnie
-i~nie wymagaj\k{a} po\l{}\k{a}czenia z~us\l{}ugami zewn\k{e}trznymi.
-W~warstwie analizy statystycznej sygna\l{}u wideo oraz przy~obliczaniu widma
-cz\k{e}stotliwo\'{s}ciowego klatek (analiza FFT) wykorzystywana jest biblioteka
+\textit{lower thirds}) aplikacja korzysta z~silników~OCR.
+W~zależności od~konfiguracji środowiska uruchamiany jest silnik
+\textbf{EasyOCR} lub \textbf{PaddleOCR} --- oba działają lokalnie
+i~nie wymagają połączenia z~usługami zewnętrznymi.
+W~warstwie analizy statystycznej sygnału wideo oraz przy~obliczaniu widma
+częstotliwościowego klatek (analiza FFT) wykorzystywana jest biblioteka
 \textbf{SciPy}.
 
-Detekcja watermark\'{o}w niewidzialnych i~sprawdzenie metadanych C2PA
-(\textit{Content Credentials}) realizowane s\k{a} przez dedykowane modu\l{}y
-\texttt{c2pa\_detector} i~dodatkowe komponenty opieraj\k{a}ce si\k{e}
+Detekcja watermarków niewidzialnych i~sprawdzenie metadanych C2PA
+(\textit{Content Credentials}) realizowane są przez dedykowane moduły
+\texttt{c2pa\_detector} i~dodatkowe komponenty opierające się
 na~publicznych specyfikacjach standardu C2PA opracowanego przez
 \textit{Coalition for Content Provenance and Authenticity}.
-W~cz\k{e}\'{s}ci badawczej uwzgl\k{e}dniono r\'{o}wnie\.{z} wp\l{}yw system\'{o}w
-\textbf{SynthID} (Google DeepMind) na~materia\l{}y generowane przez popularne
-generatory, co~pozwoli\l{}o zebra\'{c} w\l{}asny detektor z~rozwi\k{a}zaniami
-opartymi na~znakach osadzanych bezpo\'{s}rednio w~procesie generacji.
+W~części badawczej uwzględniono również wpływ systemów
+\textbf{SynthID} (Google DeepMind) na~materiały generowane przez popularne
+generatory, co~pozwoliło zebrać własny detektor z~rozwiązaniami
+opartymi na~znakach osadzanych bezpośrednio w~procesie generacji.
 
 % -------------------------------------------------------------------
 \section{Architektura aplikacji i~GUI}
 
-Interfejs u\.{z}ytkownika napisany w~PyQt6 pe\l{}ni rol\k{e} warstwy steruj\k{a}cej
-ca\l{}ym procesem analitycznym. G\l{}\'{o}wne okno aplikacji podzielone jest
+Interfejs użytkownika napisany w~PyQt6 pełni rolę warstwy sterującej
+całym procesem analitycznym. Główne okno aplikacji podzielone jest
 na~dwa panele rozdzielone ruchomym separatorem (\textit{splitter}): lewy panel
-zawiera tabel\k{e} wynik\'{o}w, konsol\k{e} log\'{o}w i~pasek post\k{e}pu,
-natomiast prawy panel prezentuje podgl\k{a}d aktualnie analizowanej klatki wideo
-oraz powi\k{e}kszony widok obszaru, w~kt\'{o}rym wykryto watermark (\textit{Zoom}).
+zawiera tabelę wyników, konsolę logów i~pasek postępu,
+natomiast prawy panel prezentuje podgląd aktualnie analizowanej klatki wideo
+oraz powiększony widok obszaru, w~którym wykryto watermark (\textit{Zoom}).
 
-Tabela wynik\'{o}w zawiera sze\'{s}\'{c} kolumn: nazw\k{e} pliku, typ materia\l{}u,
-status detekcji AI, procentowy udzia\l{} klatek z~wykryciem, status metadanych C2PA
-oraz \'{s}cie\.{z}k\k{e} do~raportu~CSV. Dwukrotne klikni\k{e}cie wiersza otwiera
-w~eksploratorze plik\'{o}w katalog wynikowy przypisany do~danego materia\l{}u wideo.
+Tabela wyników zawiera sześć kolumn: nazwę pliku, typ materiału,
+status detekcji AI, procentowy udział klatek z~wykryciem, status metadanych C2PA
+oraz ścieżkę do~raportu~CSV. Dwukrotne kliknięcie wiersza otwiera
+w~eksploratorze plików katalog wynikowy przypisany do~danego materiału wideo.
 
-Obs\l{}ugiwane formaty wideo to: \texttt{mp4}, \texttt{mov}, \texttt{avi},
-\texttt{mkv} i~\texttt{webm}. Aplikacja jest ukierunkowana wy\l{}\k{a}cznie
-na~analiz\k{e} \textbf{materia\l{}\'{o}w filmowych}, nie obrazow statycznych,
-co~odpowiada celowi pracy --- detekcji watermark\'{o}w i~\'{s}lad\'{o}w
-generatywnego pochodzenia w~plikach wideo, gdzie istotna jest zar\'{o}wno
-zawarto\'{s}\'{c} pojedynczej klatki, jak i~informacja temporalna mi\k{e}dzy klatkami.
+Obsługiwane formaty wideo to: \texttt{mp4}, \texttt{mov}, \texttt{avi},
+\texttt{mkv} i~\texttt{webm}. Aplikacja jest ukierunkowana wyłącznie
+na~analizę \textbf{materiałów filmowych}, nie obrazów statycznych,
+co~odpowiada celowi pracy --- detekcji watermarków i~śladów
+generatywnego pochodzenia w~plikach wideo, gdzie istotna jest zarówno
+zawartość pojedynczej klatki, jak i~informacja temporalna między klatkami.
 
-Pliki mog\k{a} by\'{c} dodawane do~kolejki przez okno dialogowe, przez przeci\k{a}gni\k{e}cie
-i~upuszczenie (\textit{drag and drop}) lub rekurencyjne skanowanie ca\l{}ego folderu.
-U\.{z}ytkownik konfiguruje czu\l{}o\'{s}\'{c} OCR (parametr \textit{confidence}),
-g\k{e}sto\'{s}\'{c} pr\'{o}bkowania klatek (\textit{sample rate}) oraz opcjonalny
-tryb szczeg\'{o}\l{}owej analizy dwufazowej.
+Pliki mogą być dodawane do~kolejki przez okno dialogowe, przez przeciągnięcie
+i~upuszczenie (\textit{drag and drop}) lub rekurencyjne skanowanie całego folderu.
+Użytkownik konfiguruje czułość OCR (parametr \textit{confidence}),
+gęstość próbkowania klatek (\textit{sample rate}) oraz opcjonalny
+tryb szczegółowej analizy dwufazowej.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.92\textwidth]{../photos/gui.png}
-  \caption{G\l{}\'{o}wne okno aplikacji (PyQt6) podczas wsadowej analizy plik\'{o}w wideo.
-    Lewy panel zawiera tabel\k{e} z~wynikami detekcji (kolumny: plik, typ materia\l{}u,
-    status AI, \% wykrytych klatek, status C2PA, \'{s}cie\.{z}ka do~raportu~CSV).
-    Prawy panel prezentuje aktualnie analizowan\k{a} klatk\k{e} oraz powi\k{e}kszony
+  \caption{Główne okno aplikacji (PyQt6) podczas wsadowej analizy plików wideo.
+    Lewy panel zawiera tabelę z~wynikami detekcji (kolumny: plik, typ materiału,
+    status AI, \% wykrytych klatek, status C2PA, ścieżka do~raportu~CSV).
+    Prawy panel prezentuje aktualnie analizowaną klatkę oraz powiększony
     obszar wykrycia (\textit{Zoom}).}
   \label{fig:gui_main}
 \end{figure}
@@ -97,46 +97,163 @@ tryb szczeg\'{o}\l{}owej analizy dwufazowej.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.92\textwidth]{../photos/gui_description.png}
-  \caption{Interfejs aplikacji z~opisanymi elementami: (1)~tabela wynik\'{o}w
+  \caption{Interfejs aplikacji z~opisanymi elementami: (1)~tabela wyników
     z~kolorowymi statusami detekcji --- \textcolor{red}{czerwony} dla~wykrytego AI,
-    szary dla~materia\l{}u bez~sygna\l{}u; (2)~konsola log\'{o}w prezentuj\k{a}ca
-    kolejne etapy przetwarzania; (3)~panel podgl\k{a}du klatki; (4)~panel Zoom
-    z~powi\k{e}kszonym obszarem detekcji watermarku.}
+    szary dla~materiału bez~sygnału; (2)~konsola logów prezentująca
+    kolejne etapy przetwarzania; (3)~panel podglądu klatki; (4)~panel Zoom
+    z~powiększonym obszarem detekcji watermarku.}
   \label{fig:gui_desc}
 \end{figure}
 
 % -------------------------------------------------------------------
-\section{Modu\l{}y detekcji}
+\section{Moduły detekcji}
 
-Warstwa detekcji sk\l{}ada si\k{e} z~kilku wsp\'{o}\l{}pracuj\k{a}cych modu\l{}\'{o}w
-uruchamianych kolejno dla~ka\.{z}dego pliku wideo. Modu\l{} \texttt{ocr\_detector}
-odpowiada za~ekstrakcj\k{e} klatek, normalizacj\k{e} obrazu i~wykrywanie tekstu
-metodami OCR. Wykryte regiony tekstowe s\k{a} filtrowane wed\l{}ug progu pewno\'{s}ci
-i~por\'{o}wnywane ze~s\l{}ownikiem znanych fraz watermarkingowych
+Warstwa detekcji składa się z~kilku współpracujących modułów
+uruchamianych kolejno dla~każdego pliku wideo.
+
+\subsection*{OCR i~analiza nakładek statycznych}
+
+Moduł \texttt{ocr\_detector} odpowiada za~ekstrakcję klatek, normalizację obrazu
+i~wykrywanie tekstu metodami OCR. Wykryte regiony tekstowe są filtrowane według
+progu pewności i~porównywane ze~słownikiem znanych fraz watermarkingowych
 (\enquote{Generated by AI}, \enquote{Runway}, \enquote{Sora} i~inne).
-Wyniki s\k{a} zapisywane w~raporcie wraz ze~wsp\'{o}\l{}\'{o}rz\k{e}dnymi wykrytych obszar\'{o}w,
-co~umo\.{z}liwia p\'{o}\'{z}niejsze przejrzenie klatek z~zaznaczonymi detekcjami.
+Wyniki są zapisywane w~raporcie wraz ze~współrzędnymi wykrytych obszarów,
+co~umożliwia późniejsze przejrzenie klatek z~zaznaczonymi detekcjami.
 
-Analiza statycznych nak\l{}adek polega na~obliczeniu mediany temporalnej sekwencji klatek
---- element powtarzaj\k{a}cy si\k{e} przez~wiele kolejnych klatek w~tym~samym miejscu
-(np.\ logo stacji) daje silny sygna\l{} w~medianie, kt\'{o}ry odr\'{o}\.{z}nia go
-od~tre\'{s}ci dynamicznych. Analiza przep\l{}ywu optycznego pozwala z~kolei wykry\'{c}
-obszary o~zerowym lub prawie zerowym ruchu, kt\'{o}re mog\k{a} wskazywa\'{c}
-na~obecno\'{s}\'{c} nak\l{}adki statycznej.
+Analiza statycznych nakładek polega na~obliczeniu mediany temporalnej sekwencji klatek
+--- element powtarzający się przez~wiele kolejnych klatek w~tym~samym miejscu
+(np.\ logo stacji) daje silny sygnał w~medianie, który odróżnia go
+od~treści dynamicznych. Analiza przepływu optycznego pozwala z~kolei wykryć
+obszary o~zerowym lub prawie zerowym ruchu, które mogą wskazywać
+na~obecność nakładki statycznej.
 
-Dla~ka\.{z}dego pliku wytwarzany jest zestaw artefakt\'{o}w diagnostycznych:
-klatki z~zaznaczonymi obszarami detekcji, obraz mediany temporalnej,
-wizualizacje z~analizy FFT oraz plik~\texttt{report.csv} zawieraj\k{a}cy
-metadane analizy, numery klatek, wsp\'{o}\l{}\'{o}rz\k{e}dne wykry\'{c}
-i~poziomy pewno\'{s}ci.
+\subsection*{Analiza częstotliwościowa --- moduł FluxFFT}
+
+Moduł \texttt{flux\_fft\_detector} realizuje detekcję opartą na~widmie
+częstotliwościowym klatek wideo. Materiały generatywne charakteryzują się
+obniżonym udziałem składowych wysokoczęstotliwościowych względem naturalnych
+nagrań kamerowych, ponieważ modele dyfuzji i~architektury transformer
+generują obrazy o~wygładzonych gradientach i~zredukowanym szumie.
+Dla~każdej próbkowanej klatki obliczany jest stosunek energii wysokich
+częstotliwości do~całkowitej energii widma (\texttt{freq\_hf\_ratio}),
+a~następnie uśredniany po~całej sekwencji.
+
+Wartości \texttt{freq\_hf\_ratio\_mean} istotnie poniżej progu
+\texttt{HF\_RATIO\_THRESHOLD} stanowią jeden ze~składowych sygnałów
+w~funkcji fuzji. Moduł pełni rolę uzupełniającą wobec analizy przepływu
+optycznego --- najsilniej odróżnia materiały Sora i~Runway Gen3 od~nagrań
+broadcastowych, dla~których charakterystyczna jest wysoka zmienność
+przestrzenna związana z~szumem kompresji i~teksturą tła.
+
+\subsection*{Klasyfikator stylistyczny --- moduł AIStyleCLIP}
+
+Moduł \texttt{ai\_style\_clip\_detector} korzysta z~reprezentacji osadzonych
+przez model CLIP do~oceny, czy sekwencja klatek przypomina wizualnie
+materiały generatywne. Na~podstawie cech wyekstrahowanych z~kolejnych klatek
+trenowany jest lekki klasyfikator binarny (\texttt{clip\_classifier.pkl}),
+który przypisuje każdemu filmowi prawdopodobieństwo przynależności
+do~klasy materiałów AI (\texttt{ai\_style\_prob}).
+
+Wartość ta pełni w~systemie podwójną rolę. Po~pierwsze, wysoki wynik
+(\texttt{ai\_style\_prob} $\geq$ \texttt{AI\_STYLE\_CLIP\_HIGH\_CONF\_THRESHOLD})
+jest traktowany jako samodzielny sygnał AI-specific, co~może wywołać
+detekcję nawet przy~niskim wyniku punktowym funkcji fuzji.
+Po~drugie, wartość ta~jest wykorzystywana jako warunek aktywacji
+heurystyki TC Conditional Boost opisanej w~sekcji~\ref{sec:tc_boost}.
+
+\subsection*{Spójność temporalna --- moduł TemporalConsistency}
+
+Moduł \texttt{temporal\_consistency\_detector} analizuje trzy sygnały
+zmienności w~czasie: wariancję różnic klatek (\texttt{tc\_frame\_diff\_variance}),
+gładkość pola przepływu optycznego (\texttt{tc\_of\_smoothness})
+oraz odchylenie standardowe luminancji w~czasie (\texttt{tc\_luminance\_temporal\_std}).
+Materiały wygenerowane przez modele dyfuzji odznaczają się wyższą
+konsekwencją stylistyczną między klatkami niż naturalne nagrania,
+które zawierają szum sensora, mikrodrgania i~przypadkowe zmiany oświetlenia.
+
+Wynik modułu (\texttt{tc\_score}) wpływa na~końcowy wynik fuzji
+przez mechanizm bonus punktów (\texttt{tc\_bonus}). Sygnał temporalny
+jest szczególnie przydatny dla~nagrań po~kompresji H.264,
+gdzie artefakty blokowe maskują wysokoczęstotliwościowe cechy widmowe,
+a~gładkość ruchu generatywnego pozostaje rozróżnialna.
+
+% -------------------------------------------------------------------
+\section{Fuzja sygnałów i~heurystyki decyzyjne}
+
+Wszystkie sygnały produkowane przez poszczególne detektory są agregowane
+w~funkcji \texttt{fuse()} zdefiniowanej w~module \texttt{evaluate.py}.
+Wynik tej funkcji to~punkt na~skali $[-\infty, \infty]$, przy~czym
+próg detekcji (\texttt{POINTS\_THRESHOLD\_DEFAULT}) wynosi~5.
+
+Poszczególne sygnały wnoszą następujące wartości punktowe:
+obecność przepływu optycznego i~niski stosunek obszaru nakładki~(+1~każdy),
+niska wariancja tekstury i~niski udział HF przy~kształcie AI~(+1~każdy),
+regiony zero-variance~(+1), narożna, kompaktowa nakładka~(+1),
+niewidzialny watermark~(+2), metadane C2PA~AI~(+2), sygnał Flux~(+3).
+Korekty negatywne eliminują wzorce charakterystyczne dla~transmisji sportowych
+i~pasków informacyjnych: szeroki dolny overlay~($-2$), heurystyki
+scoreboard/billboard/lower-third~(od~$-2$ do~$-3$).
+
+\subsection*{Heurystyki zabezpieczające}
+
+Oprócz podstawowej funkcji punktowej w~systemie działają trzy
+dodatkowe mechanizmy zabezpieczające przed~fałszywymi alarmami:
+
+\begin{itemize}
+  \item \textbf{broadcast\_score\_cap} --- ogranicza wynik do~3~punktów
+    dla~filmów, które uaktywniły pułapkę wzorca broadcastowego,
+    a~nie mają potwierdzenia AI z~C2PA ani Flux;
+  \item \textbf{of\_penalty} --- odejmuje~2~punkty, gdy liczba regionów
+    przepływu optycznego przekracza~20 przy~braku sygnału AI-specific,
+    co~chroni przed~detekcją dynamicznych nagrań sportowych i~koncertowych;
+  \item \textbf{clean\_ai\_rescue} --- specjalna ścieżka detekcji dla~filmów
+    bez~widocznych nakładek, z~niskim udziałem HF i~bez~jakichkolwiek
+    sygnałów broadcastowych, dedykowana materiałom Sora i~Runway Gen3,
+    które nie zawierają watermarków tekstowych.
+\end{itemize}
+
+% -------------------------------------------------------------------
+\section{TC Conditional Boost}
+\label{sec:tc_boost}
+
+Jedną z~heurystyk zastosowanych w~końcowej wersji detektora jest mechanizm
+TC Conditional Boost (\textit{Temporal Consistency Boost}). Jest to~reguła
+późnej fuzji działająca na~przypadkach granicznych --- filmach, których
+wynik po~zsumowaniu wszystkich sygnałów mieści się w~przedziale $s \in \{2, 3\}$
+punktów, co~bez~dodatkowej interwencji skutkowałoby klasyfikacją FN.
+
+Mechanizm zwiększa wynik o~jeden punkt, gdy spełnione są jednocześnie
+trzy warunki:
+\begin{enumerate}
+  \item detektor spójności temporalnej aktywował się ($\texttt{tc\_detected} = 1$),
+  \item ocena stylistyczna CLIP mieści się w~przedziale umiarkowanego
+    sygnału AI: $p_\text{AI} \geq \texttt{TC\_MIN\_AI\_STYLE\_PROB} = 0{,}44$,
+  \item wartość $p_\text{AI}$ jest jednocześnie poniżej progu
+    $\texttt{LOWER\_THIRD\_QUALITY\_PROB\_THRESHOLD} = 0{,}50$,
+    co~eliminuje materiały broadcastowe z~animowanymi planszami dolnej trzeciej,
+    u~których CLIP może generować umiarkowany wynik AI.
+\end{enumerate}
+
+Warunek~(3) jest kluczowy z~punktu widzenia precyzji. Materiały z~kategorii
+\texttt{adv\_fp\_trap} zawierające pełnoekranowe plansze lub paski informacyjne
+charakteryzują się zazwyczaj $p_\text{AI} \geq 0{,}50$ lub aktywnym sygnałem
+\texttt{broadcast\_trap}, co~blokuje aktywację boostu. W~zbiorze ewaluacyjnym
+żadna z~próbek broadcastowych nie spełniła wszystkich trzech warunków
+jednocześnie (\texttt{tc\_boost\_applied}~$= 0$ we~wszystkich przypadkach
+\texttt{adv\_fp\_trap}).
+
+Boost jest zaimplementowany jako wydzielona funkcja \texttt{tc\_boost()}
+w~\texttt{evaluate.py}, korzystająca wyłącznie ze~stałych zdefiniowanych
+w~\texttt{fusion\_params.py}. Dzięki temu parametry heurystyki można
+modyfikować bez~ingerencji w~logikę pozostałych modułów.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\textwidth]{../photos/analized_frames.png}
-  \caption{Przyk\l{}adowe klatki wideo przeanalizowane przez aplikacj\k{e}.
-    Dla~ka\.{z}dej klatki zaznaczono prostok\k{a}tami obszary, w~kt\'{o}rych
-    silnik OCR wykry\l{} tekst o~pewno\'{s}ci powy\.{z}ej zadanego progu.
-    Widoczne regiony odpowiadaj\k{a} znakom wodnym (watermarkom) osadzonym
+  \caption{Przykładowe klatki wideo przeanalizowane przez aplikację.
+    Dla~każdej klatki zaznaczono prostokątami obszary, w~których
+    silnik OCR wykrył tekst o~pewności powyżej zadanego progu.
+    Widoczne regiony odpowiadają znakom wodnym (watermarkom) osadzonym
     przez generator wideo w~momencie syntezy klatki.}
   \label{fig:frames}
 \end{figure}
@@ -144,50 +261,50 @@ i~poziomy pewno\'{s}ci.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\textwidth]{../photos/analized_frames_folder.png}
-  \caption{Struktura katalogu wynikowego wygenerowanego przez aplikacj\k{e}
+  \caption{Struktura katalogu wynikowego wygenerowanego przez aplikację
     dla~jednego pliku wideo. Katalog zawiera: zapisane klatki z~zaznaczonymi
     wykryciami (\texttt{frame\_*.jpg}), obraz mediany temporalnej
-    (\texttt{median\_frame.jpg}), wizualizacj\k{e} analizy FFT
-    (\texttt{fft\_spectrum.jpg}) oraz raport\texttt{\ report.csv}
-    z~pe\l{}nym zestawem metadanych detekcji.}
+    (\texttt{median\_frame.jpg}), wizualizację analizy FFT
+    (\texttt{fft\_spectrum.jpg}) oraz raport \texttt{report.csv}
+    z~pełnym zestawem metadanych detekcji.}
   \label{fig:folder}
 \end{figure}
 
-Taki spos\'{o}b dokumentowania wynik\'{o}w sprawia, \.{z}e system nie dzia\l{}a
-jak \enquote{czarna skrzynka} --- u\.{z}ytkownik mo\.{z}e przejrze\'{c} ka\.{z}dy artefakt
-i~zweryfikowa\'{c} zasadno\'{s}\'{c} decyzji klasyfikacyjnej.
+Taki sposób dokumentowania wyników sprawia, że system nie działa
+jak \enquote{czarna skrzynka} --- użytkownik może przejrzeć każdy artefakt
+i~zweryfikować zasadność decyzji klasyfikacyjnej.
 
 % -------------------------------------------------------------------
-\section{\'{Z}r\'{o}d\l{}a i~inspiracje techniczne}
+\section{Źródła i~inspiracje techniczne}
 
-Rozw\'{o}j systemu by\l{} wspierany przez dokumentacje techniczne bibliotek
+Rozwój systemu był wspierany przez dokumentacje techniczne bibliotek
 \textbf{OpenCV}, \textbf{PyQt6}, \textbf{EasyOCR} i~\textbf{PaddleOCR},
-a~w~warstwie koncepcyjnej przez publiczne materia\l{}y dotycz\k{a}ce standardu
-\textbf{C2PA} (\url{https://c2pa.org}), dokumentacj\k{e} systemu
-\textbf{SynthID} (Google DeepMind) oraz publikacje om\'{o}wione
-w~rozdzia\l{}ach~2--3 niniejszej pracy.
+a~w~warstwie koncepcyjnej przez publiczne materiały dotyczące standardu
+\textbf{C2PA} (\url{https://c2pa.org}), dokumentację systemu
+\textbf{SynthID} (Google DeepMind) oraz publikacje omówione
+w~rozdziałach~2--3 niniejszej pracy.
 
-Doskonalenie detekcji mia\l{}o charakter iteracyjny. Wyniki w\l{}asnego detektora
-by\l{}y por\'{o}wnywane z~zachowaniem publicznych generator\'{o}w wideo
-(Runway, Sora, Luma Dream Machine) i~komercyjnych detektor\'{o}w,
-a~skuteczno\'{s}\'{c} poszczeg\'{o}lnych heurystyk weryfikowano po~typowych
+Doskonalenie detekcji miało charakter iteracyjny. Wyniki własnego detektora
+były porównywane z~zachowaniem publicznych generatorów wideo
+(Runway, Sora, Luma Dream Machine) i~komercyjnych detektorów,
+a~skuteczność poszczególnych heurystyk weryfikowano po~typowych
 operacjach na~plikach: kompresji, skalowaniu, rekodowaniu i~konwersji formatu.
-Dzi\k{e}ki temu projekt ewoluowa\l{} w~kierunku wielosygna\l{}owego detektora,
-kt\'{o}ry \l{}\k{a}czy analiz\k{e} OCR, przep\l{}ywu optycznego,
-artefakt\'{o}w FFT i~metadanych pochodzenia.
+Dzięki temu projekt ewoluował w~kierunku wielosygnałowego detektora,
+który łączy analizę OCR, przepływu optycznego,
+artefaktów FFT i~metadanych pochodzenia.
 
 % -------------------------------------------------------------------
-\section{Ewaluacja ilo\'{s}ciowa}
+\section{Ewaluacja ilościowa}
 \label{sec:ewaluacja}
 
-Ewaluacj\k{e} przeprowadzono na~zbiorze 137~plik\'{o}w wideo podzielonych
+Ewaluację przeprowadzono na~zbiorze 137~plików wideo podzielonych
 na~cztery kategorie testowe (tabela~\ref{tab:eval_splits}).
 Zastosowano metryki klasyfikacji binarnej: recall (TPR),
-wska\'{z}nik fa\l{}szywych alarm\'{o}w (FPR), precyzj\k{e} oraz F1.
+wskaźnik fałszywych alarmów (FPR), precyzję oraz F1.
 
 \begin{table}[h]
 \centering
-\caption{Sk\l{}ad zbioru ewaluacyjnego wed\l{}ug kategorii}
+\caption{Skład zbioru ewaluacyjnego według kategorii}
 \label{tab:eval_splits}
 \begin{tabular}{llr}
 \toprule
@@ -195,20 +312,20 @@ Kategoria & Opis & $N$ \\
 \midrule
 \texttt{ai\_baseline}    & Filmy syntetyczne bez modyfikacji              & 43 \\
 \texttt{adv\_compressed} & Filmy AI po kompresji H.264                    & 26 \\
-\texttt{adv\_cropped}    & Filmy AI po przyci\k{e}ciu kadr\'{o}w          & 26 \\
-\texttt{adv\_fp\_trap}   & Materia\l{}y broadcastowe (klasa negatywna)    & 42 \\
+\texttt{adv\_cropped}    & Filmy AI po przycięciu kadrów                 & 26 \\
+\texttt{adv\_fp\_trap}   & Materiały broadcastowe (klasa negatywna)       & 42 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection*{Wyniki ko\'{n}cowe}
+\subsection*{Wyniki końcowe}
 
-Tabela~\ref{tab:eval_results} przedstawia wyniki ko\'{n}cowej wersji detektora
-z~aktywnym mechanizmem TC Conditional Boost~(S1).
+Tabela~\ref{tab:eval_results} przedstawia wyniki końcowej wersji detektora
+z~aktywnym mechanizmem TC Conditional Boost.
 
 \begin{table}[h]
 \centering
-\caption{Metryki klasyfikacji ko\'{n}cowej wersji detektora}
+\caption{Metryki klasyfikacji końcowej wersji detektora}
 \label{tab:eval_results}
 \begin{tabular}{lrrrrr}
 \toprule
@@ -222,41 +339,53 @@ Kategoria & $N$ & Recall & Precyzja & F1 & FPR \\
 \end{tabular}
 \end{table}
 
-Detektor osi\k{a}gn\k{a}\l{} recall~0{,}837 na~zbiorze bazowym
-oraz~0{,}923 na~materiale przyci\k{e}tym, co~potwierdza skuteczno\'{s}\'{c}
-mechanizmu odbudowy sygna\l{}u przep\l{}ywu optycznego dla~kadrowanych nagra\'{n}~AI.
-Wska\'{z}nik fa\l{}szywych alarm\'{o}w wyni\'{o}s\l{} $\mathrm{FPR} = 0{,}119$
-dla~kategorii \texttt{adv\_fp\_trap}, co~plasuje si\k{e} poni\.{z}ej
-wyznaczonego progu $1/7 \approx 0{,}143$. Precyzja r\'{o}wna~1{,}000
-we~wszystkich kategoriach pozytywnych oznacza brak fa\l{}szywych pozytyw\'{o}w
-poza dedykowan\k{a} kategori\k{a} broadcastow\k{a}.
+Detektor osiągnął recall~0{,}837 na~zbiorze bazowym
+oraz~0{,}923 na~materiale przyciętym, co~potwierdza skuteczność
+mechanizmu odbudowy sygnału przepływu optycznego dla~kadrowanych nagrań~AI.
+Wskaźnik fałszywych alarmów wyniósł $\mathrm{FPR} = 0{,}119$
+dla~kategorii \texttt{adv\_fp\_trap}, co~plasuje się poniżej
+wyznaczonego progu $1/7 \approx 0{,}143$. Precyzja równa~1{,}000
+we~wszystkich kategoriach pozytywnych oznacza brak fałszywych pozytywów
+poza dedykowaną kategorią broadcastową.
 
-\subsection*{Mechanizm TC Conditional Boost}
+\subsection*{Analiza błędów}
 
-Jedn\k{a} z~heurystyk zastosowanych w~ko\'{n}cowej wersji detektora jest
-mechanizm TC Conditional Boost (\textit{Temporal Consistency Boost}, S1).
-Jego dzia\l{}anie polega na~zwi\k{e}kszeniu wyniku detekcji o~dodatkowy punkt
-dla~film\'{o}w spe\l{}niaj\k{a}cych jednocze\'{s}nie trzy warunki:
-(1)~ocena stylistyczna AI powy\.{z}ej progu $p_\text{AI} \geq 0{,}44$,
-(2)~wynik mie\'{s}ci si\k{e} w~zakresie granicznym $s \in \{2,\,3\}$ punkt\'{o}w, oraz
-(3)~niski wska\'{z}nik obecno\'{s}ci element\'{o}w broadcastowych
-$p_\text{lower} \leq 0{,}50$.
+Fałszywe negatywy w~zbiorze \texttt{ai\_baseline} (7~przypadków na~43)
+dotyczą materiałów generatywnych, w~których generator nie osadził
+widocznego watermarku, a~sygnały pośrednie (HF, texture, TC) nie
+przekraczają progów przy~braku sygnału Flux lub C2PA.
+Są to~głównie krótkie klipy z~dużym ruchem kamerowym i~złożoną
+scenografią --- ich charakterystyka wizualna zbliża się do~naturalnych
+nagrań dokumentalnych.
 
-Warunek~(3) pe\l{}ni rol\k{e} zabezpieczenia przed~fa\l{}szywymi alarmami
-dla~materia\l{}\'{o}w newsowych zawieraj\k{a}cych animowane plansze dolnej
-trzeciej --- kategorii stanowi\k{a}cej g\l{}\'{o}wne \'{z}r\'{o}d\l{}o b\l{}\k{e}d\'{o}w
-we~wcze\'{s}niejszych wersjach systemu (sekcja~4.2.3).
+Pięć fałszywych pozytywów w~zbiorze \texttt{adv\_fp\_trap}
+charakteryzuje się wynikiem~$s = 4{,}0$ przy~aktywnym \texttt{tc\_detected},
+ale bez~sygnału \texttt{broadcast\_trap}. Materiały te~to~nagrania sportowe
+z~dynamicznym ruchem i~jednorodnym tłem boiska, których profil widmowy
+i~teksturowy jest mylnie interpretowany jako cechy generatywne.
+Ponieważ TC Conditional Boost nie aktywuje się dla~wyników $s \geq 4$
+(warunek \texttt{TC\_ELIGIBLE\_SCORES}), żaden z~tych przypadków nie został
+wzmocniony przez heurystykę --- błędna klasyfikacja pochodzi wyłącznie
+z~wyniku bazowej funkcji fuzji.
 
 % -------------------------------------------------------------------
 \section{Wnioski implementacyjne}
 
-Przeprowadzona implementacja potwierdzi\l{}a, \.{z}e skuteczny detektor materia\l{}\'{o}w AI
-nie powinien opiera\'{c} si\k{e} na~jednym sygna\l{}e. Znacznie lepsze rezultaty
-daje po\l{}\k{a}czenie kilku niezale\.{z}nych \'{z}r\'{o}de\l{} informacji:
-OCR, analizy ruchu, artefakt\'{o}w cz\k{e}stotliwo\'{s}ciowych,
+Przeprowadzona implementacja potwierdziła, że skuteczny detektor materiałów AI
+nie powinien opierać się na~jednym sygnale. Znacznie lepsze rezultaty
+daje połączenie kilku niezależnych źródeł informacji:
+OCR, analizy ruchu, artefaktów częstotliwościowych,
 watermarkingu niewidzialnego i~metadanych proweniencji.
-Do\'{s}wiadczenia z~budowy aplikacji pokazuj\k{a} jednocze\'{s}nie,
-\.{z}e r\'{o}wnie wa\.{z}na jak warstwa algorytmiczna jest jako\'{s}\'{c}
-interfejsu, czytelno\'{s}\'{c} raportowania i~dost\k{e}pno\'{s}\'{c}
-artefakt\'{o}w diagnostycznych --- szczeg\'{o}lnie przy~analizie trudnych
-przypadk\'{o}w, w~kt\'{o}rych automatyczna decyzja wymaga ludzkiej weryfikacji.
+Doświadczenia z~budowy aplikacji pokazują jednocześnie,
+że równie ważna jak warstwa algorytmiczna jest jakość
+interfejsu, czytelność raportowania i~dostępność
+artefaktów diagnostycznych --- szczególnie przy~analizie trudnych
+przypadków, w~których automatyczna decyzja wymaga ludzkiej weryfikacji.
+
+Iteracyjna natura projektu ujawniła też~istotną asymetrię w~dostępności danych
+testowych: nagrania broadcastowe z~planszami informacyjnymi stanowią
+znacznie trudniejszy przypadek graniczny niż typowe materiały AI
+z~widocznym watermarkiem. W~kolejnych etapach rozwoju systemu warto
+rozważyć rozszerzenie zbioru negatywnego o~materiały z~dynamicznym
+tekstem ekranowym (transmisje esportowe, relacje giełdowe),
+które nie były reprezentowane w~obecnym zbiorze ewaluacyjnym.
