@@ -313,7 +313,7 @@ Rozwój systemu był wspierany przez dokumentacje techniczne bibliotek
 a~w~warstwie koncepcyjnej przez publiczne materiały dotyczące standardu
 \textbf{C2PA} (\url{https://c2pa.org}), dokumentację systemu
 \textbf{SynthID} (Google DeepMind) oraz publikacje omówione
-w~rozdziałach~2--3 niniejszej pracy.
+w~rozdziałach~2--3 tego opracowania.
 
 Doskonalenie detekcji miało charakter iteracyjny. Wyniki własnego detektora
 były porównywane z~zachowaniem publicznych generatorów wideo
@@ -357,7 +357,7 @@ i~\texttt{cinematic\_rescue\_guard}.
 
 \begin{table}[h]
 \centering
-\caption{Metryki klasyfikacji końcowej wersji detektora}
+\caption{Metryki klasyfikacji końcowej wersji detektora; wartość globalna AUC wyznaczona z frontu Pareto FPR/TPR wyniosła $0{,}709$.}
 \label{tab:eval_results}
 \begin{tabular}{lrrrrrr}
 \toprule
@@ -370,6 +370,9 @@ Kategoria & $N$ & TP & FN & Recall & F1 & FPR \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+Wartość globalna AUC wyznaczona na podstawie frontu Pareto FPR/TPR
+z pliku \texttt{pareto\_frontier.csv} wyniosła około $0{,}709$.
 
 Detektor osiągnął recall~0{,}605 na~zbiorze bazowym
 i~0{,}577--0{,}538 na~zbiorach z~modyfikacją kompresji i~przycięcia.
@@ -444,15 +447,6 @@ Punkt odpowiadający domyślnej konfiguracji systemu jest wyróżniony na wykres
 jako punkt operacyjny. Jego pozycja blisko brzegu frontu Pareto pokazuje,
 że wybrany próg detekcji nie był arbitralny, lecz opierał się na analizie
 trade-offu między fałszywymi alarmami a czułością.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.90\textwidth]{figures/07_pareto_frontier.png}
-  \caption{Front Pareto dla przestrzeni konfiguracji fuzji. 
-    Osie przedstawiają wartości FPR oraz TPR/Recall, a punkt operacyjny 
-    oznacza domyślną konfigurację wybraną dla końcowej wersji systemu.}
-  \label{fig:pareto_frontier}
-\end{figure}
 
 \subsection*{Analiza błędów}
 

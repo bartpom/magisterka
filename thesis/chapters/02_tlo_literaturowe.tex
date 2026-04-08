@@ -209,36 +209,37 @@ przy testowaniu na~nowym generatorze \cite{Wang2024ReliabilityPerspective}.
 
 Literatura identyfikuje kilka kluczowych otwartych problem\'{o}w:
 
-\paragraph{Generalizacja mi\k{e}dzy-modelowa.}
-G\l{}\'{o}wnym wyzwaniem jest budowa detektor\'{o}w, kt\'{o}re dzia\l{}aj\k{a}
+\begin{itemize}
+  \item \textbf{(1) Generalizacja mi\k{e}dzy-modelowa.}
+    G\l{}\'{o}wnym wyzwaniem jest budowa detektor\'{o}w, kt\'{o}re dzia\l{}aj\k{a}
 skutecznie na~modelach nieb\k{e}d\k{a}cych cz\k{e}\'{s}ci\k{a} zbioru treningowego.
-Sun et al.\ \cite{Sun2024GenVideo} wykazali, \.{z}e detektory
-trenowane na~starszych modelach GAN osi\k{a}gaj\k{a} tylko
-$\sim$60\% AUC na~filmach z~Kling AI czy Runway Gen-4.
+    Sun et al.\ \cite{Sun2024GenVideo} wykazali, \.{z}e detektory
+    trenowane na~starszych modelach GAN osi\k{a}gaj\k{a} tylko
+    $\sim$60\% AUC na~filmach z~Kling AI czy Runway Gen-4.
 
-\paragraph{Odporno\'{s}\'{c} na~kompresj\k{e} i~postprocessing.}
+  \item \textbf{(2) Odporno\'{s}\'{c} na~kompresj\k{e} i~postprocessing.}
 Wi\k{e}kszo\'{s}\'{c} materia\l{}\'{o}w w~Internecie przechodzi wielokrotn\k{a}
 reenkodacj\k{e} (YouTube, TikTok, Messenger). Badania
 \cite{Caldelli2021OpticalFlowCNN, Nassif2022ImprovedOpticalFlow}
 pokaza\l{}y, \.{z}e artefakty spektralne i~przep\l{}yw optyczny s\k{a}
 wra\.{z}liwe na~kompresj\k{e} H.264/H.265 o~wysokim wsp\'{o}\l{}czynniku.
 
-\paragraph{Fa\l{}szywe alarmy na~tre\'{s}ciach broadcastowych.}
-Animowane grafiki newsowe (\textit{lower thirds}), elementy
-Augmented Reality i~renderowane reklamy 3D systematycznie generuj\k{a}
-fa\l{}szywe alarmy we~wszystkich znanych klasach detektor\'{o}w.
-Jest to empirycznie potwierdzone w~niniejszej pracy (sekcja~\ref{sec:aivideodetector})
-oraz w~literaturze \cite{Wang2024ReliabilityPerspective}.
+  \item \textbf{(3) Fa\l{}szywe alarmy na~tre\'{s}ciach broadcastowych.}
+    Animowane grafiki newsowe (\textit{lower thirds}), elementy
+    Augmented Reality i~renderowane reklamy 3D systematycznie generuj\k{a}
+    fa\l{}szywe alarmy we~wszystkich znanych klasach detektor\'{o}w.
+    Jest to empirycznie potwierdzone w~literaturze \cite{Wang2024ReliabilityPerspective}.
 
-\paragraph{Interpretowalno\'{s}\'{c} decyzji.}
+  \item \textbf{(4) Interpretowalno\'{s}\'{c} decyzji.}
 Wi\k{e}kszo\'{s}\'{c} komercyjnych narz\k{e}dzi zwraca jedynie wynik liczbowy
 bez wyja\'{s}nienia, kt\'{o}re sygna\l{}y zadecydowa\l{}y o~klasyfikacji.
 Badania z~zakresu XAI (\textit{eXplainable AI}) stosowane do~deepfake
 nale\.{z}\k{a} do~mniejszo\'{s}ci w~literaturze \cite{Khan2025ComprehensiveSurvey}.
 
-\paragraph{Wy\'{s}cig zbroje\'{n}.}
-Ka\.{z}da nowa generacja modeli generatywnych wymaga przetrenowania
-detektor\'{o}w. Badania \cite{Li2025AIGCSurvey} sugeruj\k{a},
-\.{z}e podej\'{s}cia oparte na~cechach fundamentalnych (FFT, optical flow,
-metadane) s\k{a} bardziej trwa\l{}e ni\.{z} podej\'{s}cia CNN trenowane
-end-to-end na~konkretnych modelach.
+  \item \textbf{(5) Wy\'{s}cig zbroje\'{n}.}
+    Ka\l{}da nowa generacja modeli generatywnych wymaga przetrenowania
+    detektor\'{o}w. Badania \cite{Li2025AIGCSurvey} sugeruj\k{a},
+    \.{z}e podej\'{s}cia oparte na~cechach fundamentalnych (FFT, optical flow,
+    metadane) s\k{a} bardziej trwa\l{}e ni\. {z} podej\'{s}cia CNN trenowane
+    end-to-end na~konkretnych modelach.
+\end{itemize}
