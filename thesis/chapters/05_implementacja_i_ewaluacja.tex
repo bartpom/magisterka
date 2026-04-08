@@ -373,9 +373,12 @@ Kategoria & $N$ & TP & FN & Recall & F1 & FPR \\
 
 \noindent\textit{Nota: Dla kategorii \texttt{adv\_fp\_trap} (klasa negatywna)
 Recall i F1 nie są zdefiniowane — podano wyłącznie FPR.
-Przybliżone AUC operacyjne wyznaczone z~obwiedni frontu Pareto FPR/TPR wyniosło $0{,}709$
-(warto zaznaczyć, że~wartość ta jest przybliżeniem pola pod krzywą operacyjną konfiguracji,
-a~nie klasycznym ROC-AUC liczonym z~pełnej listy progów decyzji).}
+Przybliżone AUC operacyjne wyznaczone z~obwiedni frontu Pareto FPR/TPR wyniosło $0{,}709$.
+Warto podkreślić, że przybliżone AUC operacyjne ma w tym badaniu charakter pomocniczy,
+ponieważ zostało oszacowane z ograniczonej liczby konfiguracji sweepu,
+a nie z pełnej krzywej ROC wyznaczonej dla ciągłego klasyfikatora.
+Dodatkowo sam sweeeping objął kilkadziesiąt konfiguracji, a front Pareto zawierał tylko kilka
+punktów reprezentujących optymalne kompromisy między FPR a TPR.}
 
 Detektor osiągnął recall~0{,}605 na~zbiorze bazowym
 i~0{,}577--0{,}538 na~zbiorach z~modyfikacją kompresji i~przycięcia.
@@ -391,6 +394,9 @@ przy~czym należy zaznaczyć, że~zbiór ten~nie jest w~pełni zrównoważony
 wartość precyzji i~sprawia, że~recall oraz FPR są bardziej miarodajnymi
 wskaźnikami jakości detektora w~tym~kontekście.
 
+Ze względu na umiarkowaną liczebność prób w poszczególnych splitach
+uzyskane wartości Recall i FPR należy interpretować jako oszacowania obarczone
+niepewnością, a nie jako wartości stabilne dla wszystkich przyszłych zbiorów danych.
 \subsection*{Analiza przestrzeni parametrów --- front Pareto}
 
 Dobór domyślnego progu detekcji nie był arbitralny. Przeprowadzono
@@ -501,8 +507,12 @@ C2PA & 14 & 14 & metadane proweniencji \\
 \end{tabular}
 \end{table}
 
-\noindent Wiele przypadków pozytywnych było potwierdzone przez~kilka heurystyk równocześnie,
-co~wskazuje na~solidność decyzji klasyfikacyjnej.
+Warto zauważyć, że heurystyki FluxFFT i C2PA aktywowały się wyłącznie
+na trafieniach prawdziwie dodatnich, co wskazuje na ich wysoką selektywność.
+Z kolei broadcast_score_cap oraz of_penalty pełniły przede wszystkim rolę ochronną,
+ograniczając liczbę fałszywych alarmów na materiałach telewizyjnych.
+Heurystyka clean_ai_rescue aktywowała się rzadko, lecz wyłącznie na materiałach dodatnich,
+co potwierdza jej użyteczność jako ścieżki ratunkowej dla „czystych” materiałów AI.
 
 % -------------------------------------------------------------------
 \subsection*{Globalna macierz pomyłek}
@@ -524,6 +534,10 @@ co~wskazuje na~solidność decyzji klasyfikacyjnej.
 \noindent Tabela ujawnia, że główną przeszkodą w~poprawie skuteczności
 jest niska liczba prawdziwych pozytywów względem całej populacji AI (55 na~95, tj.\ recall 0,605),
 natomiast wskaźnik fałszywych alarmów jest dobrze kontrolowany (4 na~42, tj.\ FPR 0,095).
+
+Z punktu widzenia praktycznego oznacza to, że obecna konfiguracja systemu
+jest konserwatywna: znacznie częściej pomija część materiałów AI
+niż generuje fałszywe alarmy na materiałach autentycznych.
 
 % -------------------------------------------------------------------
 \section{Ograniczenia metody i~zagrożenia poprawności}
@@ -563,7 +577,7 @@ do~ogólności uzyskanych wyników:
   \item \textbf{Porównania komercyjnych narzędzi na~różnych próbach.}
     Każde narzędzie komercyjne było testowane na~innym podzbiorze ze względów logistycznych
     (limit zapytań, koszt). To uniemożliwia bezpośrednie porównanie 1:1
-    o~charakterze benchmarkowego; wyniki w~sekcji~\ref{sec:tools_comparison}
+o~charakterze benchmarkowego; wyniki w~sekcji~\ref{sec:porownanie_zbiorcze}
     mają charakter orientacyjny, nie porównawczy.
 
   \item \textbf{Ograniczona interpretacja sygnałów}. 
@@ -595,7 +609,9 @@ Kluczowe biblioteki:
 \end{itemize}
 
 Kod źródłowy systemu dostępny jest w~repozytorium projektu pod adresem
-(\url{https://github.com/bart1/magisterka} --- dostęp na~żądanie).
+\url{https://github.com/bartpomietlo/magisterka}.
+W razie potrzeby możliwe jest również wskazanie konkretnego commita
+odpowiadającego wersji użytej do benchmarku.
 Benchmark uruchamia się komendą:
 \begin{verbatim}
 python kod/dataset/evaluate.py --dataset ./path/to/test_set \
@@ -603,7 +619,8 @@ python kod/dataset/evaluate.py --dataset ./path/to/test_set \
 \end{verbatim}
 
 Parametry fuzji zdefiniowane są w~pliku \texttt{fusion\_params.py};
-wartości progu decyzji i~wagi heurystyk zoptymalizowano na~zbiorze Pareto.
+wartości progu decyzji i~wagi heurystyk dobrano na~podstawie sweepu parametrów
+oraz analizy frontu Pareto.
 Szczegółowe numery commitów oraz wersje użytych modeli (np.\ Flux, CLIP)
 dokumentowane są w~pliku \texttt{requirements.txt} i~logach benchmarku.
 
