@@ -338,7 +338,12 @@ AIVideoDetector.com
 \bottomrule
 \end{tabular}}
 \end{table}
-
+Metryki komercyjnych serwis\'{o}w i wyniki w\l{}asnego systemu pochodz\k{a} z r\'{o}\.{z}nych
+podzbior\'{o}w testowych oraz z r\'{o}\.{z}nych etap\'{o}w rozwoju detektora,
+dlatego maj\k{a}
+charakter orientacyjny. Prezentowane por\'{o}wnanie pokazuje raczej tendencje ni\.{z}
+ostateczne warto\'{s}ci, a wi\k{a}\.{z}\k{a}ca ewaluacja ko\'{n}cowa zostanie przeprowadzona
+w rozdziale~5.
 \textbf{Uwaga metodologiczna.}
 Bezpo\'{s}rednie por\'{o}wnanie metryk mi\k{e}dzy narz\k{e}dziami nale\.{z}y
 traktowa\'{c} z~ostro\.{z}no\'{s}ci\k{a} --- ka\.{z}dy serwis testowano
@@ -349,22 +354,12 @@ osi\k{a}gaj\k{a}cym wysoki Recall (86{,}8\%) jest Undetectable.ai,
 najni\.{z}szy za\'{s} FPR spo\'{s}r\'{o}d narz\k{e}dzi o~binarnym trybie
 decyzji wykazuje proponowany system (16{,}2\%).
 
-% [[WYKRES G: heatmap (macierz ciepła).
-%   Wiersze: narzędzie (DetectVideo.ai / Undetectable.ai /
-%            AIVideoDetector.com / Nasz system — tryb szybki / Nasz system — dwuetapowy).
-%   Kolumny: kategoria materiału (syntetyczne Runway / syntetyczne Sora /
-%            syntetyczne Kling–Luma / deepfake / autentyczne / corner cases).
-%   Wartość w komórce: % wykrycia (Recall) dla danej kombinacji.
-%   Skala barw: biały (0%) → ciemnozielony (100%).
-%   Cel: uwidocznienie, które narzędzia radzą sobie lepiej z konkretnymi
-%        generatorami i kategoriami materiałów.
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]
-
 % -------------------------------------------------------------------
 \subsection{Zalety i~wady proponowanego detektora}
 \label{sec:zalety_wady_wlasny}
 
-Proponowane podej\'{s}cie opiera si\k{e} na~fuzji wielokana\l{}owej:
+Opisany poni\'{z}ej wariant systemu stanowi etap por\'{o}wnawczy wcze\'{s}niejszej wersji
+implementacji i opiera si\k{e} na~fuzji wielokana\l{}owej:
 analiza spektralna (FFT), przep\l{}yw optyczny i~metadane C2PA.
 
 \textbf{Zalety:}
@@ -378,7 +373,7 @@ analiza spektralna (FFT), przep\l{}yw optyczny i~metadane C2PA.
         sygna\l{}\'{o}w umo\.{z}liwiaj\k{a} analiz\k{e} przyczynow\k{a} decyzji.
   \item \textbf{Praca lokalna} --- przetwarzanie bez wysy\l{}ania danych
         do~chmury; dane wra\.{z}liwe nie opuszczaj\k{a} urz\k{a}dzenia.
-  \item \textbf{Konkurencyjna skuteczno\'{s}\'{c}} --- F1\,=\,78{,}4\%,
+  \item \textbf{Konkurencyjna skuteczno\'{s}\'{c} wst\'{e}pnej wersji} --- F1\,=\,78{,}4\%,
         Precision\,=\,82{,}9\%, FPR\,=\,16{,}2\%.
 \end{itemize}
 
@@ -394,150 +389,3 @@ analiza spektralna (FFT), przep\l{}yw optyczny i~metadane C2PA.
   \item \textbf{Ograniczenia generalizacji} --- gorsza skuteczno\'{s}\'{c}
         dla modeli nieobj\k{e}tych zbiorem treningowym.
 \end{itemize}
-
-% ===================================================================
-\section{Planowane badania por\'{o}wnawcze}
-\label{sec:planowane_badania}
-
-Niniejsza sekcja okre\'{s}la eksperymenty, kt\'{o}re zostan\k{a} przeprowadzone
-po~zako\'{n}czeniu implementacji systemu i~zebraniu pe\l{}nych wynik\'{o}w detekcji.
-Dla ka\.{z}dego eksperymentu okre\'{s}lono hipotez\k{e} badawcz\k{a},
-metodologi\k{e} oraz miejsce na~wizualizacj\k{e} wynik\'{o}w.
-
-% -------------------------------------------------------------------
-\subsection{Skuteczno\'{s}\'{c} detekcji wed\l{}ug modelu generatywnego}
-\label{sec:plan_per_model}
-
-\textbf{Hipoteza:} r\'{o}\.{z}ne modele generatywne pozostawiaj\k{a} r\'{o}\.{z}nie
-nasilone \'{s}lady artefakt\'{o}w wizualnych, przez co skutek detekcji
-r\'{o}\.{z}ni si\k{e} mi\k{e}dzy modelami.
-
-\textbf{Metodologia:}
-Dla ka\.{z}dego modelu (Runway Gen-3, Gen-4 Turbo, Gen-4.5, Sora,
-Kling AI, Luma Dream Machine, Pika Labs, Grok) obliczone zostan\k{a}
-metryki Recall i~Precision na~podzbiorze film\'{o}w z~danego \'{z}r\'{o}d\l{}a.
-Wyniki zestawione zostan\k{a} na~wykresie s\l{}upkowym pogrupowanym
-wed\l{}ug modelu, umo\.{z}liwiaj\k{a}c por\'{o}wnanie ,,\l{}atwo\'{s}ci wykrycia''
-dla poszczeg\'{o}lnych system\'{o}w generatywnych.
-
-% [[WYKRES A: słupkowy — oś X: model generatywny (9 modeli),
-%   oś Y: Recall [%]; każdy słupek = jeden model ze zbioru testowego.
-%   Cel: pokazać, które modele są trudniejsze do wykrycia (niższy Recall).
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]
-
-% -------------------------------------------------------------------
-\subsection{Tryb szybki vs.\ tryb dwuetapowy --- skuteczno\'{s}\'{c} i~czas}
-\label{sec:plan_tryby}
-
-\textbf{Hipoteza:} tryb dwuetapowy osi\k{a}ga wy\.{z}szy Recall
-kosztem d\l{}u\.{z}szego czasu przetwarzania; tryb szybki jest
-wystarczaj\k{a}cy dla oczywistych przypadk\'{o}w AI.
-
-\textbf{Metodologia:}
-Ka\.{z}dy film ze~zbioru testowego przetworzony zostanie dwukrotnie ---
-raz w~trybie szybkim (fast mode: analiza co $k$-tej klatki,
-wy\l{}\k{a}czony etap OCR drugiej rundy) i~raz w~trybie dwuetapowym
-(two-pass mode: pe\l{}na analiza z~ponown\k{a} weryfikacj\k{a} klatek
-w~okresie niepewno\'{s}ci). Zmierzone zostan\k{a}: czas przetwarzania
-(sekundy), Recall, Precision i~F1 dla obu tryb\'{o}w.
-
-% [[WYKRES B: wykres dwupanelowy (side-by-side).
-%   Panel lewy: słupki dla Recall / Precision / F1 — tryb szybki vs. dwuetapowy.
-%   Panel prawy: czas przetwarzania [s] per film — boxplot lub scatter dla obu trybów.
-%   Cel: zilustrować trade-off skuteczność–czas między trybami.
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]
-
-% -------------------------------------------------------------------
-\subsection{Typy znak\'{o}w wodnych a~skuteczno\'{s}\'{c} trybu szybkiego}
-\label{sec:plan_watermarks}
-
-\textbf{Hipoteza:} tryb szybki wykrywa skutecznie widoczne znaki wodne
-(watermark OCR), lecz wymaga trybu dwuetapowego do~niezawodnego
-wykrycia subtelnych wzorzc\'{o}w FFT charakterystycznych dla
-niewidocznych watermark\'{o}w.
-
-\textbf{Metodologia:}
-Filmy z~\l{}atwo wykrywalnymi widocznymi znakami wodnymi (Runway, Kling AI)
-zestawione zostan\k{a} z~filmami, w~kt\'{o}rych g\l{}\'{o}wnym sygna\l{}em
-jest analiza spektralna FFT (Sora, modele bez widocznego logo).
-Dla obu grup obliczony zostanie Recall osobno dla trybu szybkiego
-i~dwuetapowego, co ujawni, kt\'{o}ry typ znak\'{o}w wodnych
-wymaga pe\l{}nej analizy.
-
-% [[WYKRES C: pogrupowany wykres słupkowy.
-%   Oś X: typ watermarku (widoczny OCR / spektralny FFT / C2PA metadata).
-%   Oś Y: Recall [%].
-%   Dwie serie słupków: tryb szybki (jasny) i dwuetapowy (ciemny).
-%   Cel: pokazać, dla których klas watermarków tryb szybki jest wystarczający.
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]
-
-% -------------------------------------------------------------------
-\subsection{Czas skanowania w~zale\.{z}no\'{s}ci od~d\l{}ugo\'{s}ci i~rozdzielczo\'{s}ci wideo}
-\label{sec:plan_czas}
-
-\textbf{Hipoteza:} czas przetwarzania ro\'{s}nie liniowo z~liczb\k{a} klatek
-i~kwadratowo z~rozdzielczo\'{s}ci\k{a} (rozmiar macierzy pikseli).
-
-\textbf{Metodologia:}
-Dla ka\.{z}dego pliku ze~zbioru testowego zarejestrowane zostan\k{a}:
-d\l{}ugo\'{s}\'{c} w~sekundach, rozdzielczo\'{s}\'{c} (np.\ 720p~/~1080p~/~4K),
-liczba klatek oraz ca\l{}kowity czas analizy w~trybie szybkim
-i~dwuetapowym. Na~podstawie tych danych sporz\k{a}dzona zostanie
-analiza regresji i~wykres rozrzutu.
-
-% [[WYKRES D: scatter plot.
-%   Oś X: długość wideo [s].
-%   Oś Y: czas przetwarzania [s].
-%   Kolor punktu: tryb (szybki / dwuetapowy).
-%   Kształt punktu: rozdzielczość (720p / 1080p / 4K).
-%   Linie regresji dla obu trybów.
-%   Cel: ocena złożoności obliczeniowej systemu.
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]
-
-% -------------------------------------------------------------------
-\subsection{Analiza ROC i~por\'{o}wnanie AUC}
-\label{sec:plan_roc}
-
-\textbf{Hipoteza:} system dwuetapowy osi\k{a}ga wy\.{z}sze AUC ni\.{z}
-tryb szybki, a~oba przekraczaj\k{a} warto\'{s}\'{c} AUC\,=\,0{,}80
-wyznaczon\k{a} przez serwisy komercyjne na~tym samym zbiorze.
-
-\textbf{Metodologia:}
-Dla ka\.{z}dego pliku zarejestrowany zostanie ci\k{a}g\l{}y wynik
-pewno\'{s}ci (confidence score) wygenerowany przez system.
-Na~jego podstawie wyznaczona zostanie krzywa ROC
-i~pole AUC dla trybu szybkiego i~dwuetapowego.
-Wyniki por\'{o}wnane zostan\k{a} z~krzywymi dla serwis\'{o}w
-Undetectable.ai i~AIVideoDetector.com uzyskanymi na~tym samym zbiorze
-kontrolnym ($N=79$).
-
-% [[WYKRES E: wykres krzywych ROC.
-%   Osie: FPR (oś X) i TPR/Recall (oś Y), zakres [0,1].
-%   Cztery krzywe: nasz system — tryb szybki, nasz system — dwuetapowy,
-%   Undetectable.ai, AIVideoDetector.com.
-%   Linia bazowa (losowy klasyfikator) jako przerywana przekątna.
-%   Adnotacje AUC przy każdej krzywej.
-%   Cel: obiektywne porównanie jakości klasyfikatorów.
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]
-
-% -------------------------------------------------------------------
-\subsection{Analiza b\l{}\k{e}d\'{o}w: fa\l{}szywe alarmy wed\l{}ug kategorii}
-\label{sec:plan_bledy}
-
-\textbf{Hipoteza:} wi\k{e}kszo\'{s}\'{c} fa\l{}szywych pozytyw\'{o}w
-koncentruje si\k{e} w~kategorii corner cases (materia\l{}y z~animowanymi
-elementami graficznymi), a~nie w~autentycznych nagraniach kamerowych.
-
-\textbf{Metodologia:}
-Ka\.{z}dy fa\l{}szywy alarm (FP) przypisany zostanie do jednej z~kategorii:
-(1) autentyczne nagranie bez grafiki, (2) materia\l{}y z~lower thirds
-lub efektami AR, (3) materia\l{}y ze~z\l{}o\.{z}on\k{a} post-produkcj\k{a}.
-Zestawienie FP wed\l{}ug kategorii oraz trybu pozwoli
-oceni\'{c}, czy tryb dwuetapowy redukuje b\l{}\k{e}dy w~okre\'{s}lonej klasie.
-
-% [[WYKRES F: stacked bar chart lub heatmap.
-%   Oś X: kategoria materiału (autentyczne / lower-thirds / post-produkcja).
-%   Oś Y: liczba fałszywych alarmów.
-%   Dwie serie: tryb szybki i dwuetapowy.
-%   Cel: identyfikacja kategorii odpowiedzialnych za FP systemu.
-%   Brak wniosków — dane zostaną uzupełnione po uruchomieniu Codexa.]]

@@ -427,6 +427,33 @@ jedynie kosztem istotnego obniżenia recall. Wybrana konfiguracja
 maksymalizuje TPR w~tym~przedziale, pozostając jednocześnie
 po~lewej stronie linii celu.
 
+\subsection*{Analiza frontu Pareto}
+Optymalizacja konfiguracji fuzji została przeprowadzona jako 
+przebieg parametryczny (sweep parametrów), w którym badano różne ustawienia
+wag i progów w funkcji łączącej sygnały detekcyjne.
+Na wykresie Pareto znormalizowane metryki przedstawiono na osiach: 
+FPR (fałszywe alarmy) oraz TPR/Recall (czułość detekcji).
+
+Front Pareto stanowi zbiór konfiguracji niezdominowanych, czyli takich,
+które nie są jednocześnie gorsze w obu wymiarach względem żadnej innej
+konfiguracji.
+W praktyce oznacza to, że każda konfiguracja na froncie 
+reprezentuje optymalny kompromis między minimalizacją FPR a maksymalizacją TPR.
+
+Punkt odpowiadający domyślnej konfiguracji systemu jest wyróżniony na wykresie
+jako punkt operacyjny. Jego pozycja blisko brzegu frontu Pareto pokazuje,
+że wybrany próg detekcji nie był arbitralny, lecz opierał się na analizie
+trade-offu między fałszywymi alarmami a czułością.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.90\textwidth]{../figures/07_pareto_frontier.png}
+  \caption{Front Pareto dla przestrzeni konfiguracji fuzji. 
+    Osie przedstawiają wartości FPR oraz TPR/Recall, a punkt operacyjny 
+    oznacza domyślną konfigurację wybraną dla końcowej wersji systemu.}
+  \label{fig:pareto_frontier}
+\end{figure}
+
 \subsection*{Analiza błędów}
 
 Fałszywe negatywy w~zbiorze \texttt{ai\_baseline} (17~przypadków na~43)
