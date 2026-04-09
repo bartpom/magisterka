@@ -281,23 +281,21 @@ z~agresywną dynamiką kamery nie są błędnie klasyfikowane jako materiał AI.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\textwidth]{../photos/analized_frames.png}
-  \caption{Struktura katalogu wynikowego wygenerowanego przez aplikację
-    dla~jednego pliku wideo. Katalog zawiera: zapisane klatki z~zaznaczonymi
-    wykryciami (\texttt{frame\_*.jpg}), obraz mediany temporalnej
-    (\texttt{median\_frame.jpg}), wizualizację analizy FFT
-    (\texttt{fft\_spectrum.jpg}) oraz raport \texttt{report.csv}
-    z~pełnym zestawem metadanych detekcji.}
+  \caption{Widok raportu wynikowego wygenerowanego przez aplikację dla jednego pliku wideo.
+    Prezentuje listę analizowanych klatek, typy wykrytych sygnałów oraz metadane detekcji.
+    Taki raport umożliwia weryfikację decyzji klasyfikacyjnej na poziomie szczegółowych atrybutów.}
   \label{fig:frames}
 \end{figure}
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\textwidth]{../photos/analized_frames_folder.png}
-  \caption{Przykładowe klatki wideo przeanalizowane przez aplikację.
-    Dla~każdej klatki zaznaczono prostokątami obszary, w~których
-    silnik OCR wykrył tekst o~pewności powyżej zadanego progu.
-    Widoczne regiony odpowiadają znakom wodnym (watermarkom) osadzonym
-    przez generator wideo w~momencie syntezy klatki.}
+  \caption{Struktura katalogu wynikowego wygenerowanego przez aplikację
+    dla~jednego pliku wideo. Katalog zawiera: zapisane klatki z~zaznaczonymi
+    wykryciami (\texttt{frame\_*.jpg}), obraz mediany temporalnej
+    (\texttt{median\_frame.jpg}), wizualizację analizy FFT
+    (\texttt{fft\_spectrum.jpg}) oraz raport \texttt{report.csv}
+    z~pełnym zestawem metadanych detekcji.}
   \label{fig:folder}
 \end{figure}
 
@@ -402,6 +400,7 @@ konfiguracji różniących się wartością progu punktowego, wagami
 poszczególnych sygnałów i~aktywnością heurystyk zabezpieczających.
 Każda konfiguracja została oceniona parą metryk: TPR na~zbiorze
 \texttt{ai\_baseline} oraz FPR na~zbiorze \texttt{adv\_fp\_trap}.
+Przetestowano 54 konfiguracje parametrów fuzji, spośród których na front Pareto weszła jedna unikalna konfiguracja.
 
 Rysunek~\ref{fig:pareto} przedstawia front Pareto wyznaczony z~wyników
 tego sweepowania. Każdy szary punkt odpowiada jednej testowanej konfiguracji;
@@ -504,11 +503,11 @@ C2PA & 14 & 14 & metadane proweniencji \\
 \end{tabular}
 \end{table}
 
-Warto zauważyć, że heurystyki FluxFFT i C2PA aktywowały się wyłącznie
+Warto zauważyć, że heurystyki \texttt{FluxFFT} i~\texttt{C2PA} aktywowały się wyłącznie
 na trafieniach prawdziwie dodatnich, co wskazuje na ich wysoką selektywność.
 Z kolei \texttt{broadcast\_score\_cap} oraz \texttt{of\_penalty} pełniły przede wszystkim rolę ochronną,
 ograniczając liczbę fałszywych alarmów na materiałach telewizyjnych.
-Heurystyka clean_ai_rescue aktywowała się rzadko, lecz wyłącznie na materiałach dodatnich,
+Heurystyka \texttt{clean\_ai\_rescue} aktywowała się rzadko, lecz wyłącznie na materiałach dodatnich,
 co potwierdza jej użyteczność jako ścieżki ratunkowej dla „czystych” materiałów AI.
 
 % -------------------------------------------------------------------
