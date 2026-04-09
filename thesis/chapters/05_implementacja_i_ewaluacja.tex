@@ -281,23 +281,23 @@ z~agresywną dynamiką kamery nie są błędnie klasyfikowane jako materiał AI.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.85\textwidth]{../photos/analized_frames.png}
-  \caption{Przykładowe klatki wideo przeanalizowane przez aplikację.
-    Dla~każdej klatki zaznaczono prostokątami obszary, w~których
-    silnik OCR wykrył tekst o~pewności powyżej zadanego progu.
-    Widoczne regiony odpowiadają znakom wodnym (watermarkom) osadzonym
-    przez generator wideo w~momencie syntezy klatki.}
-  \label{fig:frames}
-\end{figure}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{../photos/analized_frames_folder.png}
   \caption{Struktura katalogu wynikowego wygenerowanego przez aplikację
     dla~jednego pliku wideo. Katalog zawiera: zapisane klatki z~zaznaczonymi
     wykryciami (\texttt{frame\_*.jpg}), obraz mediany temporalnej
     (\texttt{median\_frame.jpg}), wizualizację analizy FFT
     (\texttt{fft\_spectrum.jpg}) oraz raport \texttt{report.csv}
     z~pełnym zestawem metadanych detekcji.}
+  \label{fig:frames}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{../photos/analized_frames_folder.png}
+  \caption{Przykładowe klatki wideo przeanalizowane przez aplikację.
+    Dla~każdej klatki zaznaczono prostokątami obszary, w~których
+    silnik OCR wykrył tekst o~pewności powyżej zadanego progu.
+    Widoczne regiony odpowiadają znakom wodnym (watermarkom) osadzonym
+    przez generator wideo w~momencie syntezy klatki.}
   \label{fig:folder}
 \end{figure}
 
@@ -377,8 +377,11 @@ Przybliżone AUC operacyjne wyznaczone z~obwiedni frontu Pareto FPR/TPR wyniosł
 Warto podkreślić, że przybliżone AUC operacyjne ma w tym badaniu charakter pomocniczy,
 ponieważ zostało oszacowane z ograniczonej liczby konfiguracji sweepu,
 a nie z pełnej krzywej ROC wyznaczonej dla ciągłego klasyfikatora.
-Dodatkowo sam sweeeping objął kilkadziesiąt konfiguracji, a front Pareto zawierał tylko kilka
-punktów reprezentujących optymalne kompromisy między FPR a TPR.}
+Sweep objął \textbf{54 konfiguracji} parametrów fuzji;
+spośród nich \textbf{1} wszedł na front Pareto.
+Raportowane AUC~$=~0{,}709$ należy interpretować jako przybliżoną miarę operacyjną,
+a~nie klasyczne ROC-AUC ciągłego klasyfikatora~--- wyznaczono je
+jako pole pod obwiednią frontu Pareto FPR/TPR, nie z~pełnej krzywej progów decyzji.}
 
 Detektor osiągnął recall~0{,}605 na~zbiorze bazowym
 i~0{,}577--0{,}538 na~zbiorach z~modyfikacją kompresji i~przycięcia.
@@ -509,7 +512,7 @@ C2PA & 14 & 14 & metadane proweniencji \\
 
 Warto zauważyć, że heurystyki FluxFFT i C2PA aktywowały się wyłącznie
 na trafieniach prawdziwie dodatnich, co wskazuje na ich wysoką selektywność.
-Z kolei broadcast_score_cap oraz of_penalty pełniły przede wszystkim rolę ochronną,
+Z kolei \texttt{broadcast\_score\_cap} oraz \texttt{of\_penalty} pełniły przede wszystkim rolę ochronną,
 ograniczając liczbę fałszywych alarmów na materiałach telewizyjnych.
 Heurystyka clean_ai_rescue aktywowała się rzadko, lecz wyłącznie na materiałach dodatnich,
 co potwierdza jej użyteczność jako ścieżki ratunkowej dla „czystych” materiałów AI.
