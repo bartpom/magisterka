@@ -404,10 +404,9 @@ Przetestowano 54 konfiguracje parametrów fuzji, spośród których na front Par
 
 Rysunek~\ref{fig:pareto} przedstawia front Pareto wyznaczony z~wyników
 tego sweepowania. Każdy szary punkt odpowiada jednej testowanej konfiguracji;
-niebieskie punkty tworzą front Pareto --- zbiór konfiguracji,
-dla~których żadna inna nie poprawia jednocześnie obu metryk.
-Czerwona gwiazdka oznacza punkt operacyjny wybranej konfiguracji
-końcowej: $\mathrm{FPR} = 0{,}095$, $\mathrm{TPR} = 0{,}60$.
+niebieski punkt wyznacza front Pareto — jedyną niezdominowaną konfigurację
+spośród 54 badanych ustawień. Czerwona gwiazdka oznacza punkt operacyjny
+wybranej konfiguracji końcowej: $\mathrm{FPR} = 0{,}095$, $\mathrm{TPR} = 0{,}60$.
 Pomarańczowa linia przerywana wyznacza cel projektowy
 $\mathrm{FPR} \leq 1/7 \approx 0{,}143$; zielona strefa pożądana
 zaznacza obszar, w~którym FPR i~TPR spełniają jednocześnie oba kryteria.
@@ -417,7 +416,7 @@ zaznacza obszar, w~którym FPR i~TPR spełniają jednocześnie oba kryteria.
   \includegraphics[width=0.88\textwidth]{figures/07_pareto_frontier.png}
   \caption{Front Pareto trade-off FPR/TPR wyznaczony z~systematycznego
     sweepowania parametrów fuzji. Szare punkty to~wszystkie testowane
-    konfiguracje; niebieskie punkty tworzą front Pareto.
+    konfiguracje; niebieski punkt wyznacza front Pareto.
     Czerwona gwiazdka ($\mathrm{FPR}=0{,}095$, $\mathrm{TPR}=0{,}60$)
     odpowiada konfiguracji końcowej.
     Pomarańczowa linia przerywana wyznacza cel projektowy
@@ -428,11 +427,11 @@ zaznacza obszar, w~którym FPR i~TPR spełniają jednocześnie oba kryteria.
   \label{fig:pareto}
 \end{figure}
 
-Istotna obserwacja wynikająca z~wykresu: wszystkie konfiguracje na~froncie Pareto
-skupiają się w~wąskim przedziale $\mathrm{FPR} \in [0{,}05;\, 0{,}12]$,
-co~wskazuje, że~dalsze zmniejszenie liczby fałszywych alarmów jest możliwe
-jedynie kosztem istotnego obniżenia recall. Wybrana konfiguracja
-maksymalizuje TPR w~tym~przedziale, pozostając jednocześnie
+Istotna obserwacja wynikająca z~wykresu: front Pareto zredukował się w praktyce
+do pojedynczej unikalnej konfiguracji, która znajduje się w wąskim przedziale
+$\mathrm{FPR} \in [0{,}05;\, 0{,}12]$. To sugeruje, że dalsze zmniejszenie liczby
+fałszywych alarmów jest możliwe jedynie kosztem istotnego obniżenia recall.
+Wybrana konfiguracja maksymalizuje TPR w tym przedziale, pozostając jednocześnie
 po~lewej stronie linii celu.
 
 \subsection*{Analiza frontu Pareto}
