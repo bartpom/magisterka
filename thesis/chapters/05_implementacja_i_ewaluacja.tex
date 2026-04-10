@@ -614,14 +614,14 @@ do~ogólności uzyskanych wyników:
     przy testowaniu na~nowych generatorach.
 
   \item \textbf{Tuning heurystyk na~własnym benchmarku.}
-    Wiele heurystyk (TC Conditional Boost, Cinematic Rescue Guard, broadcast guard)
-    było dostrajane (ang.~\emph{tuned}) bezpośrednio na~zbiorze ewaluacyjnym.
-    Stwarza to~ryzyko overfittingu do~konkretnych charakterystyk tego zbioru.
-    Ryzyko to~częściowo ogranicza zastosowanie sweepu parametrów z~selekcją na~froncie
-    Pareto (sekcja~\ref{sec:ewaluacja}): sweep parametrów z~frontem Pareto wyznacza
-    próg decyzji na~podstawie obiektywnego kryterium zewnętrznego~-- minimalizacji FPR~--
-    co~zmniejsza ryzyko ręcznego dostrojenia do~konkretnych wyjątków w~zbiorze.
-    Ideałem byłby podział na~zbiór treningowy, walidacyjny i~testowy oraz 
+    Wiele heurystyk, takich jak TC Conditional Boost, Cinematic Rescue Guard
+    i~broadcast guard, dostrajano bezpośrednio na~własnym zbiorze ewaluacyjnym.
+    Stwarza to~ryzyko częściowego przeuczenia do~charakterystyki benchmarku,
+    mimo że dobór parametrów wsparto systematycznym sweepem oraz analizą frontu
+    Pareto opisaną w~sekcji~\ref{sec:ewaluacja}.
+    Ryzyko to~częściowo ograniczono poprzez systematyczny sweep parametrów fuzji
+    i~wybór konfiguracji leżącej na~froncie Pareto, opisane w~sekcji~\ref{sec:ewaluacja}.
+    Ideałem byłby podział na~zbiór treningowy, walidacyjny i~testowy oraz
     wczesne zatrzymanie na~podstawie metryki walidacyjnej bez~dostępu do~zbioru testowego.
 
   \item \textbf{Brak szerokiej walidacji na~realnych danych.}
