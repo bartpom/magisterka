@@ -144,12 +144,7 @@ python dataset/evaluate.py --input ./videos \
   --output results.csv --mode standard
 \end{verbatim}
 
-\begin{figure}[H]
-  \centering
-  % screenshot CLI tu
-  \caption{Przykładowe uruchomienie aplikacji w~trybie CLI z~parametrami wejściowymi.}
-  \label{fig:cli_demo}
-\end{figure}
+
 
 % -------------------------------------------------------------------
 \section{Moduły detekcji}
@@ -376,13 +371,13 @@ Ewaluacja ilościowa opisana w~niniejszym rozdziale była przeprowadzana
 przy użyciu skryptu \texttt{evaluate.py} uruchamianego z~wiersza poleceń,
 co~zapewnia pełną reprodukowalność bez~interakcji z~interfejsem graficznym.
 GUI stanowi uzupełniające narzędzie operacyjne przeznaczone do~analizy
-pojedyńczych plików lub małych partii materiałów.
+pojedynczych plików lub małych partii materiałów.
 Skrypt obsługuje trzy kluczowe argumenty:
 \texttt{{-}{-}input} (katalog z~plikami wideo),
 \texttt{{-}{-}mode} (\texttt{standard}~/~\texttt{fast})
 oraz \texttt{{-}{-}output} (ścieżka do~wynikowego pliku CSV).
 Przyłączony do~katalogu plik \texttt{labels.csv}
-umozliwia automatyczne obliczenie recall i~FPR po~zakończeniu analizy.
+umożliwia automatyczne obliczenie recall i~FPR po~zakończeniu analizy.
 
 Ewaluację przeprowadzono na~zbiorze 137~plików wideo podzielonych
 na~cztery kategorie testowe (tabela~\ref{tab:eval_splits}).
@@ -617,10 +612,8 @@ do~ogólności uzyskanych wyników:
     Wiele heurystyk, takich jak TC Conditional Boost, Cinematic Rescue Guard
     i~broadcast guard, dostrajano bezpośrednio na~własnym zbiorze ewaluacyjnym.
     Stwarza to~ryzyko częściowego przeuczenia do~charakterystyki benchmarku,
-    mimo że dobór parametrów wsparto systematycznym sweepem oraz analizą frontu
-    Pareto opisaną w~sekcji~\ref{sec:ewaluacja}.
-    Ryzyko to~częściowo ograniczono poprzez systematyczny sweep parametrów fuzji
-    i~wybór konfiguracji leżącej na~froncie Pareto, opisane w~sekcji~\ref{sec:ewaluacja}.
+    ograniczone poprzez systematyczny sweep parametrów fuzji i~wybór konfiguracji
+    leżącej na~froncie Pareto (sekcja~\ref{sec:ewaluacja}).
     Ideałem byłby podział na~zbiór treningowy, walidacyjny i~testowy oraz
     wczesne zatrzymanie na~podstawie metryki walidacyjnej bez~dostępu do~zbioru testowego.
 
