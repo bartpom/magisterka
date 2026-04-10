@@ -280,10 +280,10 @@ z~agresywną dynamiką kamery nie są błędnie klasyfikowane jako materiał AI.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.85\textwidth]{../photos/analized_frames.png}
+  \includegraphics[width=0.95\textwidth]{../photos/analized_frames.png}
   \caption{Widok raportu wynikowego wygenerowanego przez aplikację dla jednego pliku wideo.
-    Prezentuje listę analizowanych klatek, typy wykrytych sygnałów oraz metadane detekcji.
-    Taki raport umożliwia weryfikację decyzji klasyfikacyjnej na poziomie szczegółowych atrybutów.}
+    Prezentuje wybrany fragment tabeli wyników z najważniejszymi kolumnami sygnałów i metadanych.
+    Taki raport wspiera weryfikację decyzji klasyfikacyjnej na poziomie konkretnych atrybutów.}
   \label{fig:frames}
 \end{figure}
 
@@ -509,27 +509,26 @@ co potwierdza jej użyteczność jako ścieżki ratunkowej dla „czystych” ma
 \end{table}
 
 \begin{figure}[h]
-\centering
-\begin{tikzpicture}
-  \definecolor{lightblue}{RGB}{173,216,230}
-  \definecolor{mediumblue}{RGB}{70,130,180}
-  \definecolor{darkblue}{RGB}{0,0,139}
-  \fill[lightblue] (0,0) rectangle (2,2);
-  \fill[mediumblue] (2,0) rectangle (4,2);
-  \fill[darkblue] (0,2) rectangle (2,4);
-  \fill[mediumblue] (2,2) rectangle (4,4);
-  \draw[black, thick] (0,0) grid (4,4);
-  \node at (1,3) {\textbf{55}};
-  \node at (3,3) {\textbf{40}};
-  \node at (1,1) {\textbf{4}};
-  \node at (3,1) {\textbf{38}};
-  \node[anchor=north] at (1,4.2) {\textbf{Faktycznie: AI}};
-  \node[anchor=north] at (3,4.2) {\textbf{Faktycznie: nie-AI}};
-  \node[anchor=west, rotate=90] at (-0.2,3) {\textbf{Prognoza: AI}};
-  \node[anchor=west, rotate=90] at (-0.2,1) {\textbf{Prognoza: nie-AI}};
-\end{tikzpicture}
-\caption{Graficzna reprezentacja globalnej macierzy pomyłek detektora (zbiór ewaluacyjny, N\,=\,137)}
-\label{fig:confusion_matrix_heatmap}
+  \centering
+  \begin{tikzpicture}[font=\sffamily, scale=1.0]
+    \draw[thick] (0,0) rectangle (4,4);
+    \draw[thick] (2,0) -- (2,4);
+    \draw[thick] (0,2) -- (4,2);
+    \fill[blue!30] (0,2) rectangle (2,4);
+    \fill[blue!15] (2,2) rectangle (4,4);
+    \fill[blue!10] (0,0) rectangle (2,2);
+    \fill[blue!40] (2,0) rectangle (4,2);
+    \node at (1,3) {\large\bfseries 55};
+    \node at (3,3) {\large\bfseries 40};
+    \node at (1,1) {\large\bfseries 4};
+    \node at (3,1) {\large\bfseries 38};
+    \node[anchor=south] at (1,4.15) {\normalsize Prognoza: AI};
+    \node[anchor=south] at (3,4.15) {\normalsize Prognoza: nie-AI};
+    \node[anchor=east] at (-0.1,3) {\normalsize Faktycznie: AI};
+    \node[anchor=east] at (-0.1,1) {\normalsize Faktycznie: nie-AI};
+  \end{tikzpicture}
+  \caption{Graficzna reprezentacja globalnej macierzy pomyłek detektora (zbiór ewaluacyjny, N\,=\,137). Liczby w komórkach pozostają głównym nośnikiem informacji, a poziome opisy osi poprawiają czytelność.}
+  \label{fig:confusion_matrix_heatmap}
 \end{figure}
 
 \noindent Tabela ujawnia, że główną przeszkodą w~poprawie skuteczności
