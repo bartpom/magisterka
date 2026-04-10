@@ -25,6 +25,7 @@ import csv
 import json
 import os
 import shutil
+import argparse
 import subprocess
 import sys
 import time
@@ -131,7 +132,7 @@ RAW_FIELDS = [
     "tc_score", "tc_detected", "tc_frame_diff_variance", "tc_of_smoothness", "tc_luminance_temporal_std", "tc_bonus",
     "fft_found", "fft_score", "freq_hf_ratio_mean",
     "c2pa_found", "c2pa_ai", "c2pa_generator", "c2pa_error",
-    "frames_sampled", "duration_s", "detector_version",
+    "frames_sampled", "duration_s", "analysis_time_s", "eval_mode", "detector_version",
 ]
 
 EVAL_FIELDS = [
@@ -147,6 +148,7 @@ EVAL_FIELDS = [
     "broadcast_scoreboard_trap", "broadcast_billboard_trap",
     "broadcast_pattern_trap", "broadcast_lower_third_pattern", "broadcast_scoreboard_pattern", "broadcast_billboard_pattern",
     "freq_hf_ratio_mean", "c2pa_found", "c2pa_ai", "c2pa_generator", "duration_s",
+    "analysis_time_s", "eval_mode",
 ]
 
 DETECTOR_VERSION = "adv_v7_ai_style_clip_fft"
@@ -188,8 +190,23 @@ def copy_to_latest(snap_dir: Path) -> None:
     """Kopiuje snapshot do results/latest/ (nadpisuje)."""
     latest = RESULTS_BASE / "latest"
     if latest.exists():
-        shutil.rmtree(latest)
-    shutil.copytree(snap_dir, latest)
+        shutil.rmtree(latest, ignore_errors=True)
+        if latest.exists():
+            # Fallback: usuń zawartość plik po pliku (Windows read-only / symlink)
+            for child in latest.rglob("*"):
+                try:
+                    if child.is_file() or child.is_symlink():
+                        child.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            try:
+                latest.rmdir()
+            except Exception:
+                pass
+    try:
+        shutil.copytree(snap_dir, latest, dirs_exist_ok=True)
+    except Exception as e:
+        print(f"[WARN] copy_to_latest: {e}", file=sys.stderr)
 
 
 C2PA_AI_ORIGIN_KEYWORDS = (
@@ -774,24 +791,28 @@ def fuse(
 # Skanowanie wideo
 # ───────────────────────────────────────────────────────────────────────
 
-def scan_video(video_path: Path) -> tuple[dict[str, Any], float]:
+def scan_video(video_path: Path, mode: str = "standard") -> tuple[dict[str, Any], float, int | None]:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Nie mozna otworzyc: {video_path}")
     fps          = cap.get(cv2.CAP_PROP_FPS) or 25.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    t0 = time.time()
+    fast = (mode == "fast")
+    t0 = time.perf_counter()
     result = run_advanced_scan(
         cap, fps, total_frames,
-        n_frames_median=30,
-        check_invisible=True,
+        n_frames_median=3 if fast else 30,
+        check_invisible=not fast,
         check_fft=True,
-        check_optical_flow=True,
+        check_optical_flow=not fast,
         of_scale=0.5,
+        fast_mode=fast,
     )
-    elapsed = time.time() - t0
+    elapsed = time.perf_counter() - t0
     cap.release()
-    return result, elapsed
+    # W trybie fast zwracamy również podwyższony próg decyzji (brak OF -> wyższe FPR)
+    fast_threshold_override = 5 if fast else None
+    return result, elapsed, fast_threshold_override
 
 
 def extract_signals(result: dict[str, Any]) -> dict[str, Any]:
@@ -1165,11 +1186,33 @@ def run_threshold_sweep(raw_rows: list[dict]) -> dict[str, list[dict]]:
 # ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Benchmark detektora AI-wideo")
+    parser.add_argument(
+        "--mode", choices=["standard", "fast"], default="standard",
+        help="standard: pełna analiza OF+ZV+FFT (30 klatek); fast: bez OF, 3 klatki, FFT na 10%%"
+    )
+    parser.add_argument(
+        "--input", default=None, metavar="DIR",
+        help="Katalog z plikami wideo do analizy (tryb standalone). "
+             "Jeśli podać labels.csv w tym katalogu, obliczone zostaną recall/FPR."
+    )
+    parser.add_argument(
+        "--output", default=None, metavar="CSV",
+        help="Ścieżka do pliku CSV z wynikami trybu --input."
+    )
+    args = parser.parse_args()
+    eval_mode = args.mode
+
+    if args.input is not None:
+        run_input_mode(args.input, args.output, eval_mode)
+        return
+
     snap_dir  = make_snapshot_dir()
     git_hash  = get_git_hash()
     run_time  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[SNAP]  Snapshot: {snap_dir}")
     print(f"[SNAP]  Commit:   {git_hash}")
+    print(f"[MODE]  Tryb analizy: {eval_mode}")
     print(
         "[CFG] Using: "
         f"pts>={POINTS_THRESHOLD_DEFAULT}, hf_thr={HF_RATIO_THRESHOLD}  "
@@ -1215,7 +1258,9 @@ def main() -> None:
         for idx, vp in enumerate(videos, 1):
             print(f"  [SCAN] ({idx}/{total}) {vp.name} ... ", end="", flush=True)
             try:
-                result, elapsed = scan_video(vp)
+                t_perf0 = time.perf_counter()
+                result, elapsed, _fast_pts = scan_video(vp, mode=eval_mode)
+                analysis_time_s = time.perf_counter() - t_perf0
                 sig = extract_signals(result)
                 c2pa_sig = detect_c2pa_signal(vp)
                 if ai_style_clip is not None:
@@ -1338,8 +1383,10 @@ def main() -> None:
                     "tc_of_smoothness": float(tc_result.get("of_smoothness", 0.0)),
                     "tc_luminance_temporal_std": float(tc_result.get("luminance_temporal_std", 0.0)),
                     "tc_bonus":         int(temporal_bonus),
-                    "frames_sampled":   30,
+                    "frames_sampled":   3 if eval_mode == "fast" else 30,
                     "duration_s":       f"{elapsed:.2f}",
+                    "analysis_time_s":  f"{analysis_time_s:.3f}",
+                    "eval_mode":        eval_mode,
                     "detector_version": DETECTOR_VERSION,
                 }
                 raw_rows.append(raw_row)
@@ -1380,6 +1427,7 @@ def main() -> None:
                     tc_score = int(tc_score),
                     tc_detected = int(tc_detected),
                     tc_bonus = int(temporal_bonus),
+                    points_threshold=_fast_pts if _fast_pts is not None else POINTS_THRESHOLD_DEFAULT,
                 )
                 c2pa_override = int(c2pa_sig.get("c2pa_ai", 0)) == 1
                 if c2pa_override:
@@ -1512,6 +1560,8 @@ def main() -> None:
                     "c2pa_ai":           c2pa_sig["c2pa_ai"],
                     "c2pa_generator":    c2pa_sig["c2pa_generator"],
                     "duration_s":         f"{elapsed:.2f}",
+                    "analysis_time_s":    f"{analysis_time_s:.3f}",
+                    "eval_mode":          eval_mode,
                 }
                 eval_rows.append(eval_row)
 
@@ -1552,6 +1602,7 @@ def main() -> None:
         f.write(f"total_videos: {total_videos}\n")
         f.write(f"categories:   {list(CATEGORIES.keys())}\n")
         f.write(f"detector_ver: {DETECTOR_VERSION}\n")
+        f.write(f"eval_mode:    {eval_mode}\n")
 
     print(f"\n[RAW]     {snap_dir / 'raw_signals.csv'}")
     print(f"[EVAL]    {snap_dir / 'evaluation_results.csv'}")
@@ -1626,6 +1677,145 @@ def main() -> None:
     # —— Kopiuj do latest/ ——
     copy_to_latest(snap_dir)
     print(f"\n[LATEST] {RESULTS_BASE / 'latest'}")
+
+
+def run_input_mode(input_dir: str, output_csv: str | None, mode: str = "standard") -> None:
+    """
+    Tryb standalone: iteruje po plikach wideo w input_dir,
+    uruchamia detektor, zapisuje wyniki do CSV.
+    Jeśli w input_dir istnieje labels.csv z kolumnami filename,ground_truth,
+    oblicza recall/FPR i wypisuje summary.
+    """
+    VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+    input_path = Path(input_dir)
+    if not input_path.is_dir():
+        print(f"[ERR] --input '{input_dir}' nie jest katalogiem.", file=sys.stderr)
+        sys.exit(1)
+
+    videos = sorted(p for p in input_path.rglob("*") if p.suffix.lower() in VIDEO_EXTS)
+    if not videos:
+        print(f"[WARN] Brak plików wideo w: {input_path}", file=sys.stderr)
+        return
+
+    # Wczytaj opcjonalne etykiety ground truth
+    labels: dict[str, int] = {}
+    labels_file = input_path / "labels.csv"
+    if labels_file.exists():
+        with labels_file.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                labels[row["filename"]] = int(row["ground_truth"])
+        print(f"[LABELS] Wczytano {len(labels)} etykiet z {labels_file}")
+
+    out_path = Path(output_csv) if output_csv else input_path / f"results_{mode}.csv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    rivagan_init = initialize_invisible_watermark()
+    if not rivagan_init.get("rivaGan_ready"):
+        print(f"[INIT] rivaGAN niedostępny: {rivagan_init.get('reason', '?')}")
+
+    rows: list[dict] = []
+    total = len(videos)
+    times: list[float] = []
+
+    print(f"[INPUT] {total} plików w '{input_path}' | tryb={mode} | output={out_path}")
+    print("-" * 70)
+
+    for idx, vp in enumerate(videos, 1):
+        print(f"  [{idx:3d}/{total}] {vp.name} ... ", end="", flush=True)
+        try:
+            result, elapsed, _fast_pts = scan_video(vp, mode=mode)
+            sig = extract_signals(result)
+            c2pa_sig = detect_c2pa_signal(vp)
+
+            det, score, fuse_mode, ai_specific, broadcast_trap = fuse(
+                zv_count=sig["zv_count"],
+                zv_lower_third_roi_count=sig["zv_lower_third_roi_count"],
+                of_count=sig["of_count"],
+                of_max_area=sig["of_max_area"],
+                of_max_area_ratio=sig["of_max_area_ratio"],
+                iw_similarity=sig["iw_best_similarity"],
+                iw_matched=sig["iw_matched"],
+                fft_score=sig["fft_score"],
+                of_texture_variance_mean=sig["of_texture_variance_mean"],
+                of_low_texture_roi_count=sig["of_low_texture_roi_count"],
+                of_wide_lower_roi_count=sig["of_wide_lower_roi_count"],
+                of_corner_compact_roi_count=sig["of_corner_compact_roi_count"],
+                of_lower_third_roi_ratio=sig["of_lower_third_roi_ratio"],
+                of_upper_third_roi_ratio=sig["of_upper_third_roi_ratio"],
+                of_center_roi_ratio=sig["of_center_roi_ratio"],
+                of_wide_top_bottom_count=sig["of_wide_top_bottom_count"],
+                broadcast_scoreboard_trap=sig["broadcast_scoreboard_trap"],
+                broadcast_billboard_trap=sig["broadcast_billboard_trap"],
+                broadcast_pattern_trap=sig["broadcast_pattern_trap"],
+                broadcast_lower_third_pattern=sig["broadcast_lower_third_pattern"],
+                broadcast_scoreboard_pattern=sig["broadcast_scoreboard_pattern"],
+                broadcast_billboard_pattern=sig["broadcast_billboard_pattern"],
+                freq_hf_ratio_mean=sig["freq_hf_ratio_mean"],
+                c2pa_ai=c2pa_sig["c2pa_ai"],
+                flux_detected=0,
+                flux_similarity=0.0,
+                flux_similarity_std=0.0,
+                ai_style_prob=0.0,
+                ai_style_detected=0,
+                flux_fft_score=0,
+                fft_bonus=0,
+                flux_combined=0,
+                tc_score=0,
+                tc_detected=0,
+                tc_bonus=0,
+                points_threshold=_fast_pts if _fast_pts is not None else POINTS_THRESHOLD_DEFAULT,
+            )
+
+            label = "AI" if det == 1 else "NOT_AI"
+            times.append(elapsed)
+            rows.append({
+                "filename": vp.name,
+                "predicted_label": label,
+                "fusion_score": f"{score:.3f}",
+                "analysis_time_s": f"{elapsed:.3f}",
+                "mode": mode,
+            })
+            gt_info = ""
+            if vp.name in labels:
+                gt = labels[vp.name]
+                correct = (det == gt)
+                gt_info = f"  gt={gt} {'OK' if correct else 'ERR'}"
+            print(f"{label}  score={score:.3f}  ({elapsed:.1f}s){gt_info}")
+
+        except Exception as exc:  # noqa: BLE001
+            print(f"BLAD: {exc}", file=sys.stderr)
+            rows.append({"filename": vp.name, "predicted_label": "ERROR",
+                         "fusion_score": "", "analysis_time_s": "", "mode": mode})
+
+    # Zapisz CSV
+    with out_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["filename", "predicted_label",
+                                               "fusion_score", "analysis_time_s", "mode"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print("-" * 70)
+    print(f"[OUT]  Zapisano: {out_path}")
+    print(f"[SUMMARY] Pliki: {total}  Przeanalizowane: {len(times)}")
+    if times:
+        print(f"[SUMMARY] Czas analizy: średn.={sum(times)/len(times):.2f}s  "
+              f"min={min(times):.2f}s  max={max(times):.2f}s")
+
+    # Oblicz recall/FPR jeśli dostępne etykiety
+    if labels:
+        matched = [(r, labels[r["filename"]]) for r in rows
+                   if r["filename"] in labels and r["predicted_label"] in ("AI", "NOT_AI")]
+        if matched:
+            tp = sum(1 for r, gt in matched if r["predicted_label"] == "AI" and gt == 1)
+            fn = sum(1 for r, gt in matched if r["predicted_label"] == "NOT_AI" and gt == 1)
+            fp = sum(1 for r, gt in matched if r["predicted_label"] == "AI" and gt == 0)
+            tn = sum(1 for r, gt in matched if r["predicted_label"] == "NOT_AI" and gt == 0)
+            recall = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
+            fpr    = fp / (fp + tn) if (fp + tn) > 0 else float("nan")
+            print(f"[SUMMARY] TP={tp} FN={fn} FP={fp} TN={tn}")
+            print(f"[SUMMARY] Recall={recall:.3f}  FPR={fpr:.3f}")
+
 
 
 if __name__ == "__main__":

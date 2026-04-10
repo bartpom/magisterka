@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QSplitter, QPushButton, QGroupBox,
     QProgressBar, QTextEdit, QFileDialog, QMessageBox, QAbstractItemView,
     QTableWidget, QTableWidgetItem, QHeaderView, QDoubleSpinBox, QSpinBox,
-    QFormLayout, QLabel, QLineEdit
+    QFormLayout, QLabel, QLineEdit, QComboBox
 )
 
 import config
@@ -560,7 +560,7 @@ class WatermarkWorker(QtCore.QThread):
     frame_detected = pyqtSignal(np.ndarray, list)
     all_done       = pyqtSignal()
 
-    def __init__(self, files, row_offset, confidence, sample_rate, output_dir, detailed_scan, parent=None):
+    def __init__(self, files, row_offset, confidence, sample_rate, output_dir, detailed_scan, mode="standard", parent=None):
         super().__init__(parent)
         self._files         = list(files)
         self._row_offset    = row_offset
@@ -568,6 +568,7 @@ class WatermarkWorker(QtCore.QThread):
         self._sample_rate   = max(1, int(sample_rate)) if sample_rate else 1
         self._output_dir    = output_dir
         self._detailed_scan = detailed_scan
+        self._mode          = mode
         self._stop          = False
 
     def stop(self):
@@ -589,14 +590,21 @@ class WatermarkWorker(QtCore.QThread):
         from pathlib import Path
         vp = Path(path)
 
-        if self._detailed_scan:
+        if self._mode == "fast":
+            n_frames  = 3
+            check_iw  = False
+            of_active = False
+            mode_name = "szybki (bez OF)"
+        elif self._detailed_scan:
             n_frames  = 30
             check_iw  = True
+            of_active = True
             mode_name = "dwufazowy (pełny)"
         else:
             n_frames  = 15
             check_iw  = False
-            mode_name = "zwykły (szybki)"
+            of_active = True
+            mode_name = "zwykły (standard)"
 
         self.log_line.emit(f"[EVAL] Skanuję sygnały [{mode_name}]: {vp.name}")
 
@@ -608,7 +616,7 @@ class WatermarkWorker(QtCore.QThread):
         total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
 
         import time as _time
-        t0 = _time.time()
+        t_perf0 = _time.perf_counter()
 
         from advanced_detectors import run_advanced_scan  # type: ignore
         result = run_advanced_scan(
@@ -616,10 +624,11 @@ class WatermarkWorker(QtCore.QThread):
             n_frames_median=n_frames,
             check_invisible=check_iw,
             check_fft=True,
-            check_optical_flow=True,
+            check_optical_flow=of_active,
             of_scale=0.5,
+            fast_mode=(self._mode == "fast"),
         )
-        elapsed = _time.time() - t0
+        elapsed = _time.perf_counter() - t_perf0
         cap.release()
 
         sig      = extract_signals(result)
@@ -902,6 +911,19 @@ class MainWindow(QMainWindow):
         toggle_row.addWidget(self.toggle_detailed)
         toggle_row.addStretch()
         param_lay.addRow("", toggle_row)
+
+        # combo_mode — tryb fast jest eksperymentalny, nieudostępniany w GUI
+        # self.combo_mode = QComboBox()
+        # self.combo_mode.addItems(["Standardowy", "Szybki"])
+        # self.combo_mode.setCurrentIndex(0)
+        # self.combo_mode.setToolTip(
+        #     "Standardowy: pełna analiza OF + ZV + FFT (30 klatek). Wyższy recall.\n"
+        #     "Szybki: bez optical flow, 3 klatki, FFT na 10% próbce. 3–5× szybszy, recall ~10–15 pp niższy."
+        # )
+        # mode_row = QHBoxLayout()
+        # mode_row.addWidget(self.combo_mode)
+        # mode_row.addStretch()
+        # param_lay.addRow("Tryb analizy:", mode_row)
 
         # Informacja o aktywnym pipeline
         pipeline_info = "evaluate.py (fuzja sygnałów)" if EVALUATE_AVAILABLE else "ocr_detector (fallback)"
@@ -1336,6 +1358,7 @@ class MainWindow(QMainWindow):
             self.spin_sample.value(),
             self.txt_output_dir.text().strip(),
             self.toggle_detailed.isChecked(),
+            "fast" if False else "standard",  # tryb fast eksperymentalny — zablokowany w GUI
             parent=self
         )
         self.worker.progress.connect(self.on_progress)

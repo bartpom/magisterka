@@ -332,6 +332,18 @@ artefaktów FFT i~metadanych pochodzenia.
 \section{Ewaluacja ilościowa}
 \label{sec:ewaluacja}
 
+Ewaluacja ilościowa opisana w~niniejszym rozdziale była przeprowadzana
+przy użyciu skryptu \texttt{evaluate.py} uruchamianego z~wiersza poleceń,
+co~zapewnia pełną reprodukowalność bez~interakcji z~interfejsem graficznym.
+GUI stanowi uzupełniające narzędzie operacyjne przeznaczone do~analizy
+pojedyńczych plików lub małych partii materiałów.
+Skrypt obsługuje trzy kluczowe argumenty:
+\texttt{{-}{-}input} (katalog z~plikami wideo),
+\texttt{{-}{-}mode} (\texttt{standard}~/~\texttt{fast})
+oraz \texttt{{-}{-}output} (ścieżka do~wynikowego pliku CSV).
+Przyłączony do~katalogu plik \texttt{labels.csv}
+umozliwia automatyczne obliczenie recall i~FPR po~zakończeniu analizy.
+
 Ewaluację przeprowadzono na~zbiorze 137~plików wideo podzielonych
 na~cztery kategorie testowe (tabela~\ref{tab:eval_splits}).
 Zastosowano metryki klasyfikacji binarnej: recall (TPR),
@@ -592,6 +604,35 @@ o~charakterze orientacyjnym; wyniki w~sekcji~\ref{sec:porownanie_zbiorcze}
 Pomimo tych ograniczeń wyniki wskazują na~praktyczną wartość podejścia wielosygnałowego
 i~stanowią solidną bazę dla przyszłych badań.
 
+\subsection*{Analiza ablacyjna}
+W celu zbadania wkładu poszczególnych komponentów systemu przeprowadzono eksperyment
+ablacyjny, wyłączając kolejno moduły kosztowne obliczeniowo. Tryb \emph{fast} pomijał
+analizę optical flow, ograniczał próbkowanie klatek do mediany z 3 próbek (zamiast 5)
+oraz wyłączał detekcję znaków wodnych w przestrzeni niewidocznej.
+Tabela~\ref{tab:ablation} zestawia wyniki dla zbioru \texttt{ai\_baseline}
+i \texttt{adv\_fp\_trap}.
+\begin{table}[h]
+\centering
+\caption{Analiza ablacyjna -- wpływ wyłączenia modułów na skuteczność i FPR}
+\label{tab:ablation}
+\begin{tabular}{lccc}
+\hline
+\textbf{Konfiguracja} & \textbf{Recall (ai\_baseline)} & \textbf{FPR (fp\_trap)} & \textbf{Czas/plik} \\
+\hline
+Pełny system (standard) & 0{,}605 & 0{,}095 & $\approx$11{,}4\,s \\
+Bez OF, zredukowane próbkowanie & 0{,}326 & 0{,}381 & $\approx$0{,}8\,s \\
+\hline
+\end{tabular}
+\end{table}
+Wyniki wskazują, że optical flow jest kluczowym sygnałem dla utrzymania niskiego FPR
+-- jego brak powoduje ponad czterokrotny wzrost liczby fałszywych alarmów na materiale
+broadcastowym, mimo skrócenia czasu analizy o ok.\ 93\%. Guardy heurystyczne oparte
+na warunkach \texttt{of\_count~$\leq$~8} i \texttt{sora\_static\_override}
+trywialnie aktywowały się przy wyłączonym detektorze przepływu, co potwierdza, że
+ich projektowanie zakłada obecność sygnału OF jako kotwicy decyzyjnej.
+Analiza ablacyjna uzasadnia zatem zachowanie pełnego potoku jako jedynego trybu
+produkcyjnego.
+
 % -------------------------------------------------------------------
 \section{Reprodukowalność eksperymentu}
 \label{sec:reprodukowalnosc}
@@ -614,8 +655,18 @@ W razie potrzeby możliwe jest również wskazanie konkretnego commita
 odpowiadającego wersji użytej do benchmarku.
 Benchmark uruchamia się komendą:
 \begin{verbatim}
-python kod/dataset/evaluate.py --dataset ./path/to/test_set \
-  --output results/ --verbose
+python kod/dataset/evaluate.py --mode standard \
+  --input ./test_dataset --output results/out.csv
+\end{verbatim}
+
+Dodając do~katalogu plik \texttt{labels.csv} z~kolumnami
+\texttt{filename} i~\texttt{ground\_truth}, skrypt automatycznie
+oblicza recall i~FPR po~zakończeniu i~wypisuje podsumowanie, np.:
+\begin{verbatim}
+[SUMMARY] Pliki: 137  Przeanalizowane: 137
+[SUMMARY] Czas analizy: sredni=4.21s  min=1.83s  max=11.04s
+[SUMMARY] TP=55 FN=40 FP=4 TN=38
+[SUMMARY] Recall=0.579  FPR=0.095
 \end{verbatim}
 
 Parametry fuzji zdefiniowane są w~pliku \texttt{fusion\_params.py};
