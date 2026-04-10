@@ -111,6 +111,46 @@ tryb szczegółowej analizy dwufazowej.
   \label{fig:gui_desc}
 \end{figure}
 
+\subsection*{Tryb CLI -- automatyzacja i~ewaluacja wsadowa}
+\label{sec:cli}
+
+Oprócz interfejsu graficznego aplikacja udostępnia tryb wiersza poleceń (CLI),
+przeznaczony do~automatyzacji i~ewaluacji wsadowej bez~uruchamiania GUI.
+Aplikacja wspiera dwa niezależne tryby uruchomienia:
+
+\begin{itemize}
+  \item \textbf{Tryb GUI} -- \texttt{python main.py} -- uruchamia pełny interfejs
+    graficzny PyQt6 z~tabelą wyników, konsolą logów i~podglądem klatki;
+  \item \textbf{Tryb CLI} -- \texttt{python dataset/evaluate.py} -- uruchamia
+    potok detekcji bezpośrednio z~wiersza poleceń, bez~żadnego interfejsu graficznego.
+\end{itemize}
+
+Tryb CLI przyjmuje trzy parametry:
+\begin{itemize}
+  \item \texttt{-{}-input DIR} -- katalog zawierający pliki wideo do~przeanalizowania;
+  \item \texttt{-{}-output CSV} -- ścieżka wynikowego pliku CSV z~wynikami detekcji;
+  \item \texttt{-{}-mode standard|fast} -- tryb analizy: \texttt{standard} (pełny
+    potok z~optical flow, 30~klatek) lub \texttt{fast} (eksperymentalny, ograniczone
+    próbkowanie, bez~gwarancji jakości).
+\end{itemize}
+
+Jeśli w~katalogu \texttt{-{}-input} umieszczono plik \texttt{labels.csv}
+z~kolumnami \texttt{filename} i~\texttt{ground\_truth}, skrypt automatycznie
+oblicza recall i~FPR oraz wypisuje podsumowanie po~zakończeniu analizy.
+Przykładowe wywołanie:
+
+\begin{verbatim}
+python dataset/evaluate.py --input ./videos \
+  --output results.csv --mode standard
+\end{verbatim}
+
+\begin{figure}[H]
+  \centering
+  % screenshot CLI tu
+  \caption{Przykładowe uruchomienie aplikacji w~trybie CLI z~parametrami wejściowymi.}
+  \label{fig:cli_demo}
+\end{figure}
+
 % -------------------------------------------------------------------
 \section{Moduły detekcji}
 
