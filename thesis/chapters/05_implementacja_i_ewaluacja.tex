@@ -578,9 +578,9 @@ do~ogólności uzyskanych wyników:
     było dostrajane (ang.~\emph{tuned}) bezpośrednio na~zbiorze ewaluacyjnym.
     Stwarza to~ryzyko overfittingu do~konkretnych charakterystyk tego zbioru.
     Ryzyko to~częściowo ogranicza zastosowanie sweepu parametrów z~selekcją na~froncie
-    Pareto (sekcja~\ref{sec:ewaluacja_ilosciowa}): próg decyzji minimalizuje FPR jako cel
-    zewnętrzny niezależny od~liczby próbek, co~ogranicza możliwość nieświadomego
-    dostrojenia do~wyjątków ze~zbioru treningowego.
+    Pareto (sekcja~\ref{sec:ewaluacja_ilosciowa}): sweep parametrów z~frontem Pareto wyznacza
+    próg decyzji na~podstawie obiektywnego kryterium zewnętrznego~-- minimalizacji FPR~--
+    co~zmniejsza ryzyko ręcznego dostrojenia do~konkretnych wyjątków w~zbiorze.
     Ideałem byłby podział na~zbiór treningowy, walidacyjny i~testowy oraz 
     wczesne zatrzymanie na~podstawie metryki walidacyjnej bez~dostępu do~zbioru testowego.
 
@@ -614,7 +614,7 @@ eksperyment ablacyjny, wyłączając kolejno moduły: bonus FFT, moduł CLIP (\t
 oraz analizę optical flow wraz z~redukcją próbkowania.
 Tabela~\ref{tab:ablation} zestawia szacunkowe wyniki dla zbioru \texttt{ai\_baseline}
 i~\texttt{adv\_fp\_trap}; konfiguracje pośrednie interpolowano z~analizy aktywacji
-heurystyk (tabela~\ref{tab:aktywacje}).
+heurystyk (tabela~\ref{tab:heuristics}).
 \begin{table}[h]
 \centering
 \caption{Analiza ablacyjna -- wpływ wyłączenia modułów na skuteczność i FPR}
@@ -672,11 +672,13 @@ oblicza recall i~FPR po~zakończeniu i~wypisuje podsumowanie, np.:
 [SUMMARY] Czas analizy: sredni=4.21s  min=1.83s  max=11.04s
 [SUMMARY] TP=55 FN=40 FP=4 TN=38
 [SUMMARY] Recall=0.579  FPR=0.095
-\end{verbatim}
+\end{verbatim}%
+\footnotemark
+
 \footnotetext{Wartość Recall=0{,}579 w~powyższym podsumowaniu obejmuje łącznie
 kategorie \texttt{ai\_baseline}, \texttt{adv\_compressed} i~\texttt{adv\_cropped}
 (95~próbek pozytywnych łącznie). Dla samej kategorii \texttt{ai\_baseline}
-Recall wynosi 0{,}605 (tabela~\ref{tab:wyniki_ewaluacji}).}
+Recall wynosi 0{,}605 (tabela~\ref{tab:eval_results}).}
 
 Parametry fuzji zdefiniowane są w~pliku \texttt{fusion\_params.py};
 wartości progu decyzji i~wagi heurystyk dobrano na~podstawie sweepu parametrów
