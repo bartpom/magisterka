@@ -302,10 +302,10 @@ dla materia\l{}\'{o}w z~animowanymi elementami broadcastowymi \\
 \subsection{Zbiorcze por\'{o}wnanie skuteczno\'{s}ci detekcji}
 \label{sec:porownanie_zbiorcze}
 
-Tabela 4.4 koncentruje si\k{e} na bezpośrednim porównaniu własnego systemu
-z AIVideoDetector.com na wspólnym zbiorze 79 plików, podczas gdy tabela 4.6
-przedstawia zbiorcze wyniki dla wszystkich narzędzi na ich indywidualnych
-próbach testowych.
+Tabela 4.4 stanowi g\l{}ówne porównanie 1:1, poniewa\.{z} zestawia własny system
+z AIVideoDetector.com na wspólnym zbiorze 79 plików. Z kolei tabela 4.6 ma
+charakter wyłącznie pogl\k{a}dowy i przedstawia wyniki narz\k{e}dzi na różnych,
+nieporównywalnych próbach testowych.
 
 Tabela~\ref{tab:porownanie_zbiorcze} zestawia wszystkie testowane narz\k{e}dzia
 w~kontek\'{s}cie kluczowych metryk skuteczno\'{s}ci detekcji.
@@ -314,18 +314,19 @@ poszczeg\'{o}lne serwisy, kolumna $N$ okre\'{s}la wielko\'{s}\'{c} pr\'{o}by
 dla ka\.{z}dego narz\k{e}dzia.
 
 \textbf{Uwaga metodologiczna.} Bezpo\'{s}rednie por\'{o}wnanie metryk mi\k{e}dzy
-narz\k{e}dziami nale\.{z}y traktowa\'{c} z~ostro\.{z}no\'{s}ci\k{a} --- ka\.{z}dy
-serwis testowano na~innym podzbiorze film\'{o}w, a DetectVideo.ai nie zwraca
-wynik\'{o}w w~formacie umo\.{z}liwiaj\k{a}cym obliczenie F1. Mimo to zestawienie
-oddaje og\'{o}lny obraz skuteczno\'{s}ci: w~badanych pr\'{o}bach najwy\.z{}szy
-Recall (86,8\%) uzyska\l{} Undetectable.ai, natomiast spo\'{s}r\'{o}d narz\k{e}dzi
-o~binarnym trybie decyzji najni\.z{}szy FPR w~tym orientacyjnym por\'{o}wnaniu
-wykaza\l{} proponowany system.
+narz\k{e}dziami nie jest tu poprawnym por\'{o}wnaniem benchmarkowym 1:1, poniewa\.{z}
+ka\.{z}dy serwis testowano na~innym podzbiorze film\'{o}w, a DetectVideo.ai nie zwraca
+wynik\'{o}w w~formacie umo\.{z}liwiaj\k{a}cym obliczenie F1. Dodatkowo dla
+Undetectable.ai liczba próbek autentycznych jest niewystarczająca do estymacji FPR,
+dlatego w~tabeli warto\'{s}\'{c} ta zosta\l{}a oznaczona jako n/d. W~konsekwencji
+tabel\k{e}~\ref{tab:porownanie_zbiorcze} nale\.{z}y traktowa\'{c} jako zestawienie
+orientacyjne, a za wi\k{a}\.{z}\k{a}ce por\'{o}wnanie przyj\k{a}\'{c} wyniki ze wspólnego
+zbioru $N=79$ (tabela~\ref{tab:metryki_ogolne}).
 
 \begin{table}[htbp]
 \centering
 {\setlength{\tabcolsep}{5pt}\renewcommand{\arraystretch}{1.35}
-\caption{Zbiorcze zestawienie metryk detekcji dla wszystkich testowanych narz\k{e}dzi}
+\caption{Zbiorcze zestawienie metryk detekcji (zestawienie pogl\k{a}dowe; ró\.z{}ne próby $N$)}
 \label{tab:porownanie_zbiorcze}
 \small
 \begin{tabular}{L{3.2cm}ccccccc}
@@ -345,7 +346,7 @@ DetectVideo.ai
   & online \\
 \addlinespace[3pt]
 Undetectable.ai
-  & 46 & 86{,}8\% & {\raise0.5ex\hbox{---}} & {\raise0.5ex\hbox{---}} & n/d (N\,=\,1)\textsuperscript{a}
+      & 46 & 86{,}8\% & {\raise0.5ex\hbox{---}} & {\raise0.5ex\hbox{---}} & n/d
   & wieloklasowy (0--100)
   & online \\
 \addlinespace[3pt]
@@ -359,7 +360,6 @@ AIVideoDetector.com
   & binarny + XAI
   & lokalny \\
 \bottomrule
-\multicolumn{8}{l}{\textsuperscript{a}\small FPR obliczony na~podstawie 1~pr\'{o}bki autentycznej --- warto\'{s}\'{c} orientacyjna.}
 \end{tabular}}
 \end{table}
 

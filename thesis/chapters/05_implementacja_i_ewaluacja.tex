@@ -1,10 +1,15 @@
 \chapter{Implementacja i~ewaluacja systemu detekcji}
 
-Projekt systemu detekcji został oparty na analizie wymagań praktycznych aplikacji,
-takich jak niski współczynnik fałszywych alarmów i łatwość użycia. Wybór modularnej
-architektury pozwala na łatwe rozszerzanie o nowe detektory, podczas gdy integracja
-technik na poziomie sygnałowym i semantycznym zapewnia zrównoważony kompromis
-między czułością a niezawodnością.
+System zaprojektowano jako narzędzie do~wsadowej analizy \textbf{plików wideo}
+pod~kątem śladów pochodzenia generatywnego: watermarków jawnych i~ukrytych,
+metadanych C2PA oraz artefaktów sygnałowych. Priorytetem projektowym był
+\textbf{niski FPR} na~materiałach broadcastowych, ponieważ to~one najczęściej
+zawierają dynamiczne nakładki mylone z~cechami AI.
+
+Architektura ma~charakter modułowy: osobno działa warstwa GUI, orkiestracja
+analizy i~zestaw detektorów. Taki podział umożliwia dokładanie nowych heurystyk
+bez~przebudowy logiki fuzji. Rdzeń systemu zaimplementowano w~\textbf{Pythonie},
+co~pozwoliło szybko iterować nad detektorami i~pipeline'em ewaluacyjnym.
 
 Celem implementacji było zbudowanie praktycznego narzędzia do~wsadowej analizy
 \textbf{plików wideo} pod~kątem obecności jawnych i~ukrytych znaków wodnych,
