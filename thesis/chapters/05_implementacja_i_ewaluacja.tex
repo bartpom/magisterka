@@ -11,23 +11,6 @@ analizy i~zestaw detektorów. Taki podział umożliwia dokładanie nowych heurys
 bez~przebudowy logiki fuzji. Rdzeń systemu zaimplementowano w~\textbf{Pythonie},
 co~pozwoliło szybko iterować nad detektorami i~pipeline'em ewaluacyjnym.
 
-Celem implementacji było zbudowanie praktycznego narzędzia do~wsadowej analizy
-\textbf{plików wideo} pod~kątem obecności jawnych i~ukrytych znaków wodnych,
-metadanych pochodzenia oraz artefaktów typowych dla~materiałów wygenerowanych
-lub przetworzonych przez systemy generatywnej~AI. System powstał w~języku
-\textbf{Python}, który oferuje dojrzały ekosystem bibliotek do~przetwarzania obrazu,
-analizy sygnału i~budowy interfejsów desktopowych, a~zarazem umożliwia szybkie
-prototypowanie i~iteracyjne rozszerzanie metod detekcji.
-
-Architektura rozwiązania ma~charakter modułowy. Aplikacja składa się
-z~trzech warstw: interfejsu użytkownika (GUI), warstwy orkiestracji analizy
-oraz zestawu wyspecjalizowanych detektorów odpowiedzialnych za~wykrywanie
-watermarków widocznych, próbę odczytu watermarków niewidzialnych,
-analizę metadanych C2PA, ocenę artefaktów częstotliwościowych
-i~identyfikację statycznych nakładek powtarzających się w~kolejnych klatkach.
-Taki podział upraszcza dalszy rozwój projektu, ponieważ nowe heurystyki
-i~klasyfikatory mogą być dodawane jako osobne moduły bez~przebudowy całej aplikacji.
-
 \section{Język programowania i~biblioteki}
 
 Rdzeń systemu zaimplementowano w~języku \textbf{Python~3}.
@@ -382,7 +365,7 @@ Skrypt obsługuje trzy kluczowe argumenty:
 \texttt{{-}{-}mode} (\texttt{standard}~/~\texttt{fast})
 oraz \texttt{{-}{-}output} (ścieżka do~wynikowego pliku CSV).
 Przyłączony do~katalogu plik \texttt{labels.csv}
-umożliwia automatyczne obliczenie recall i~FPR po~zakończeniu analizy.
+umozliwia automatyczne obliczenie recall i~FPR po~zakończeniu analizy.
 
 Ewaluację przeprowadzono na~zbiorze 137~plików wideo podzielonych
 na~cztery kategorie testowe (tabela~\ref{tab:eval_splits}).
@@ -704,7 +687,9 @@ python kod/dataset/evaluate.py --mode standard \
 
 Dodając do~katalogu plik \texttt{labels.csv} z~kolumnami
 \texttt{filename} i~\texttt{ground\_truth}, skrypt automatycznie
-oblicza recall i~FPR po~zakończeniu i~wypisuje podsumowanie, np.:
+oblicza recall i~FPR po~zakończeniu i~wypisuje podsumowanie, np.
+Poniższe wyjście CLI dotyczy pełnego zbioru 137~próbek; recall dla samej kategorii
+\texttt{ai\_baseline} wynosi 0{,}605 (tabela~\ref{tab:eval_results}):
 \begin{verbatim}
 [SUMMARY] Pliki: 137  Przeanalizowane: 137
 [SUMMARY] Czas analizy: sredni=4.21s  min=1.83s  max=11.04s
