@@ -228,6 +228,22 @@ w~funkcji \texttt{fuse()} zdefiniowanej w~module \texttt{evaluate.py}.
 Wynik tej funkcji to~punkt na~skali $[-\infty, \infty]$, przy~czym
 próg detekcji (\texttt{POINTS\_THRESHOLD\_DEFAULT}) wynosi~5.
 
+Formalnie funkcję decyzyjną można zapisać jako:
+\[
+s(x) = \sum_{i=1}^{m} w_i\,h_i(x) - \sum_{j=1}^{n} \lambda_j\,g_j(x) + b(x),
+\]
+gdzie $h_i(x)$ oznaczają sygnały wzmacniające hipotezę AI,
+$g_j(x)$ oznaczają sygnały korygujące charakterystyczne dla materiałów
+broadcastowych, a~$b(x)$ obejmuje bonusy warunkowe (np. TC Conditional Boost).
+Decyzja klasyfikacyjna ma postać:
+\[
+\hat{y}(x)=\begin{cases}
+1 & \text{gdy } s(x) \geq T,\\
+0 & \text{gdy } s(x) < T,
+\end{cases}
+\quad T=5.
+\]
+
 Poszczególne sygnały wnoszą następujące wartości punktowe:
 obecność przepływu optycznego i~niski stosunek obszaru nakładki~(+1~każdy),
 niska wariancja tekstury i~niski udział HF przy~kształcie AI~(+1~każdy),

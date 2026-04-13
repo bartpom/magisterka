@@ -113,8 +113,8 @@ Porównanie metryk w tabeli~4.4 ($N=79$) odnosi się do innego, wspólnego zbior
 badawczego użytego w analizie porównawczej dwóch systemów.
 Wy\.{z}szy wynik (72\%) uzyska\l{}y jedynie filmy z~wyra\'{z}nymi
 cechami generatywnymi (abstrakcja, fantasy) oraz zmanipulowany
-dokument, co~może być sp\'{o}jne z~hipotez\k{a}, \.{z}e narz\k{e}dzie
-opiera si\k{e} g\l{}\'{o}wnie na~analizie metadanych,
+dokument, co~uzasadnia hipotezę roboczą, że narzędzie
+opiera się głównie na~analizie metadanych,
 a~nie pe\l{}nej analizie wizualnej.
 
 % \begin{figure}[htbp]
@@ -203,6 +203,8 @@ i jedynie orientacyjnym.
 AIVideoDetector.com to publicznie dost\k{e}pny serwis detekcji film\'{o}w AI.
 Narz\k{e}dzie zosta\l{}o przetestowane na~zbiorze 41~plik\'{o}w
 w~celu wyznaczenia wska\'{z}nika fa\l{}szywych alarm\'{o}w (FPR).
+Jest to niezależny podzbiór benchmarkowy przygotowany do oceny FPR;
+nie odpowiada on pełnemu zbiorowi 51~plików z~tabeli~\ref{tab:dataset}.
 
 \subsubsection{Wska\'{z}nik fa\l{}szywych alarm\'{o}w}
 
@@ -327,39 +329,29 @@ zbioru $N=79$ (tabela~\ref{tab:metryki_ogolne}).
 \begin{table}[htbp]
 \centering
 {\setlength{\tabcolsep}{5pt}\renewcommand{\arraystretch}{1.35}
-\caption{Zbiorcze zestawienie metryk detekcji (zestawienie pogl\k{a}dowe; ró\.z{}ne próby $N$)}
+\caption{Zbiorcze zestawienie metryk detekcji (zestawienie pogl\k{a}dowe, skrót; różne próby $N$)}
 \label{tab:porownanie_zbiorcze}
 \small
-\begin{tabular}{L{3.2cm}ccccccc}
+\begin{tabular}{L{4.0cm}ccccc}
 \toprule
 \textbf{Narz\k{e}dzie} &
 \textbf{$N$} &
 \textbf{Recall} &
 \textbf{Precision} &
 \textbf{F1} &
-\textbf{FPR} &
-\textbf{Tryb decyzji} &
-\textbf{Dost\k{e}p} \\
+\textbf{FPR} \\
 \midrule
 DetectVideo.ai
-  & 24 & n/d & n/d & n/d & n/d
-  & progowy (55\%~/~72\%)
-  & online \\
+      & 24 & n/d & n/d & n/d & n/d \\
 \addlinespace[3pt]
 Undetectable.ai
-      & 46 & 86{,}8\% & {\raise0.5ex\hbox{---}} & {\raise0.5ex\hbox{---}} & n/d
-  & wieloklasowy (0--100)
-  & online \\
+                  & 46 & 86{,}8\% & {\raise0.5ex\hbox{---}} & {\raise0.5ex\hbox{---}} & n/d \\
 \addlinespace[3pt]
 AIVideoDetector.com
-  & 41 & 76{,}3\% & 80{,}6\% & 78{,}4\% & 17{,}1\%
-  & binarny
-  & online \\
+      & 41 & 76{,}3\% & 80{,}6\% & 78{,}4\% & 17{,}1\% \\
 \addlinespace[3pt]
 \textbf{Nasz system}
-  & \textbf{79} & \textbf{74{,}4\%} & \textbf{82{,}9\%} & \textbf{78{,}4\%} & \textbf{16{,}2\%}
-  & binarny + XAI
-  & lokalny \\
+      & \textbf{79} & \textbf{74{,}4\%} & \textbf{82{,}9\%} & \textbf{78{,}4\%} & \textbf{16{,}2\%} \\
 \bottomrule
 \end{tabular}}
 \end{table}
